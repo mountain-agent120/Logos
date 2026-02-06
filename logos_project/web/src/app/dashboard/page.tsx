@@ -243,6 +243,9 @@ export default function Home() {
         txSig: sig
       });
 
+      // Auto-refresh logs after a short delay
+      setTimeout(() => fetchLogs(), 2000);
+
     } catch (err: any) {
       console.error("Error logging decision:", err);
 
@@ -298,7 +301,10 @@ export default function Home() {
       }
 
       console.log(`[LogosDebug] Fetched ${signatures.length} signatures for ${activeTab}`);
-      setDebugInfo(`Fetched ${signatures.length} sigs from ${devConnection.rpcEndpoint} at ${new Date().toLocaleTimeString()}`);
+      setDebugInfo(`Fetched ${signatures.length} sigs at ${new Date().toLocaleTimeString()}`);
+
+      // Clear error state if successful
+      if (debugInfo.includes("Error")) setDebugInfo("Connected");
 
       if (signatures.length === 0) {
         setLogs([]);
@@ -356,11 +362,12 @@ export default function Home() {
     }
   };
 
+  // Polling for Logs (Adaptive: 15 seconds)
   useEffect(() => {
     fetchLogs();
-    const interval = setInterval(fetchLogs, 10000);
+    const interval = setInterval(fetchLogs, 15000);
     return () => clearInterval(interval);
-  }, [connection, activeTab, publicKey]);
+  }, [activeTab, publicKey]);
 
   // State for Red Team Mode
   const [redTeamMode, setRedTeamMode] = useState(false);
@@ -382,7 +389,6 @@ export default function Home() {
         </div>
         <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
 
-          {/* Red Team Toggle */}
           <button
             onClick={() => setRedTeamMode(!redTeamMode)}
             style={{
@@ -399,6 +405,23 @@ export default function Home() {
             }}
           >
             {redTeamMode ? "🔴 ATTACK MODE ACTIVE" : "🛡️ Adversarial Mode"}
+          </button>
+
+          <button
+            onClick={fetchLogs}
+            style={{
+              padding: "0.5rem",
+              background: "#333",
+              color: "#fff",
+              border: "1px solid #555",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "1.2rem",
+              display: "flex", alignItems: "center", justifyContent: "center"
+            }}
+            title="Refresh Logs"
+          >
+            🔄
           </button>
 
           {!redTeamMode && (
