@@ -19,7 +19,7 @@ export default function Home() {
   const [demoMode, setDemoMode] = useState(false);
 
   // Demo test data for wallet: 2FS7Rqxf36mTLTvoAH191CyWtPYXQc1fwAhu5VhsoLYc
-  const demoLogs = [
+  const DEMO_LOGS = [
     {
       sig: "DEMO_TX_1",
       hash: "12ffd1e1c1532c615ffc1ade03854c1165bdd097a9dd182fe7cc9ef681aae313",
@@ -257,7 +257,7 @@ export default function Home() {
               fontSize: "0.9rem"
             }}
           >
-            {demoMode ? "🎭 Demo Mode ON" : "Demo Mode"}
+            {demoMode ? "Demo Mode ON" : "Demo Mode"}
           </button>
           <WalletMultiButton />
         </div>
@@ -317,12 +317,12 @@ export default function Home() {
           </h2>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            {(demoMode ? demoLogs : logs).length === 0 ? (
+            {(demoMode ? DEMO_LOGS : logs).length === 0 ? (
               <div style={{ textAlign: "center", padding: "2rem", color: "#444", border: "1px dashed #333", borderRadius: "8px" }}>
                 No recent logs found.
               </div>
             ) : (
-              (demoMode ? demoLogs : logs).map((log, i) => (
+              (demoMode ? DEMO_LOGS : logs).map((log: any, i: number) => (
                 <div key={i} style={{ background: "#111", padding: "1rem", borderRadius: "8px", borderLeft: `3px solid ${log.status === "APPROVED" ? "var(--success)" : "var(--error)"}` }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
                     <span className={`status-badge ${log.status === "APPROVED" ? "success" : "error"}`}>
