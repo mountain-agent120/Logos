@@ -18,6 +18,18 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
 
+  // State for Result Modal
+  const [resultModal, setResultModal] = useState<{
+    isOpen: boolean;
+    type: "success" | "error";
+    title: string;
+    message: React.ReactNode;
+    txSig?: string;
+  }>({ isOpen: false, type: "success", title: "", message: null });
+
+  // Helper: Close Modal
+  const closeModal = () => setResultModal({ ...resultModal, isOpen: false });
+
   // Demo test data for wallet: 2FS7Rqxf36mTLTvoAH191CyWtPYXQc1fwAhu5VhsoLYc
   const DEMO_LOGS = [
     {
@@ -209,12 +221,26 @@ export default function Home() {
       const sig = await sendTransaction(transaction, connection, { skipPreflight: false });
       console.log("Tx Signature:", sig);
 
-      // 5. Optimistic UI Update
-      // We don't update local logs immediately for global feed consistency,
-      // or we can add it to a "My Recent" list.
-      // For now, let's trust the poller to pick it up or show a success message.
-      alert(`Success! Decision Logged.\nObjective: ${objectiveId}\nHash: ${decisionHash.slice(0, 16)}...`);
-      // setLogs(...) // Poller will catch it
+      // 5. Optimistic UI Update / Success Modal
+      setResultModal({
+        isOpen: true,
+        type: "success",
+        title: "Decision Logged Successfully",
+        message: (
+          <>
+            <p style={{ color: "#ccc", marginBottom: "1rem" }}>
+              Your agent's decision has been cryptographically secured on the Solana Devnet.
+            </p>
+            <div style={{ background: "#222", padding: "0.75rem", borderRadius: "6px", fontSize: "0.8rem", fontFamily: "monospace", color: "#888", marginBottom: "1rem", wordBreak: "break-all" }}>
+              <strong>Hash:</strong> {decisionHash}
+            </div>
+            <p style={{ fontSize: "0.8rem", color: "#666" }}>
+              Objective ID: <span style={{ color: "#aaa" }}>{objectiveId}</span>
+            </p>
+          </>
+        ),
+        txSig: sig
+      });
 
     } catch (err: any) {
       console.error("Error logging decision:", err);
@@ -224,8 +250,22 @@ export default function Home() {
       if (err.message) {
         if (err.message.includes("User rejected")) msg = "Transaction rejected by user.";
         else if (err.message.includes("simulation")) msg = "Simulation failed. Please verify your wallet balance (Devnet SOL needed).";
+        else msg = err.message; // Show raw error for debugging
       }
-      alert(`Error: ${msg}\n\nCheck console for details.`);
+
+      setResultModal({
+        isOpen: true,
+        type: "error",
+        title: "Transaction Failed / Blocked",
+        message: (
+          <>
+            <p style={{ color: "#ffaaaa", marginBottom: "1rem" }}>{msg}</p>
+            <p style={{ fontSize: "0.8rem", color: "#666" }}>
+              If this was an Adversarial Mode test, the transaction may have been blocked solely due to insufficient funds or network issues, as we are running in Simulator Mode.
+            </p>
+          </>
+        )
+      });
     } finally {
       setLoading(false);
     }
@@ -600,6 +640,63 @@ export default function Home() {
       <footer style={{ marginTop: "4rem", textAlign: "center", color: "#444", fontSize: "0.8rem" }}>
         Logos Agent | Hackathon 2026 | Built with Next.js & Solana
       </footer>
+
+      {/* Result Modal Overlay */}
+      {resultModal.isOpen && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.8)", backdropFilter: "blur(5px)",
+          display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100
+        }}>
+          <div style={{
+            background: "#111", border: `1px solid ${resultModal.type === "success" ? "#00cc66" : "#ff4444"}`,
+            borderRadius: "12px", padding: "2rem", maxWidth: "450px", width: "90%",
+            boxShadow: `0 0 30px ${resultModal.type === "success" ? "rgba(0,204,102,0.2)" : "rgba(255,68,68,0.2)"}`,
+            animation: "fadeIn 0.2s ease-out"
+          }}>
+            <h3 style={{
+              fontSize: "1.5rem", fontWeight: "bold",
+              color: resultModal.type === "success" ? "#00cc66" : "#ff4444",
+              marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem"
+            }}>
+              {resultModal.type === "success" ? "✅ Success" : "🛑 Blocked"}
+            </h3>
+            <div style={{ fontSize: "1.1rem", fontWeight: "bold", color: "#fff", marginBottom: "1rem" }}>
+              {resultModal.title}
+            </div>
+
+            <div style={{ marginBottom: "2rem" }}>
+              {resultModal.message}
+            </div>
+
+            <div style={{ display: "flex", gap: "1rem" }}>
+              {resultModal.txSig && (
+                <a
+                  href={`https://explorer.solana.com/tx/${resultModal.txSig}?cluster=devnet`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="btn"
+                  style={{
+                    flex: 1, textAlign: "center", background: "var(--primary)", color: "#000",
+                    textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center"
+                  }}
+                >
+                  View Evidence ↗
+                </a>
+              )}
+              <button
+                onClick={closeModal}
+                className="btn"
+                style={{
+                  flex: 1, background: "#333", color: "#fff", border: "1px solid #555"
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </main>
   );
 }
