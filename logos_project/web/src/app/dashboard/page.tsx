@@ -339,7 +339,7 @@ export default function Home() {
         if (ix) {
           let action = "Logos Interaction";
           let objective = "Unknown";
-          let status = "CONFIRMED";
+          let status = "APPROVED";
           let agent = tx.transaction.message.accountKeys[0].pubkey.toString().slice(0, 8) + "..."; // Payer
           let hash = "View Transaction";
 
