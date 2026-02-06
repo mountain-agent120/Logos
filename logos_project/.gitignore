@@ -56,3 +56,4 @@ API.md
 test_data/
 *.test.json
 test-ledger/
+!package-lock.json
