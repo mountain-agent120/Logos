@@ -6,6 +6,8 @@ import * as path from 'path';
 
 // Constants
 const PROGRAM_ID_DEVNET = "3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6";
+const MEMO_PROGRAM_ID = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
+
 const DISCRIMINATOR_REGISTER = Buffer.from([135, 157, 66, 195, 2, 113, 175, 30]);
 const DISCRIMINATOR_LOG = Buffer.from([160, 73, 104, 176, 37, 115, 231, 204]);
 
@@ -78,7 +80,14 @@ export class LogosAgent {
             data
         });
 
-        return await this.sendTransaction(ix);
+        // Add Memo
+        const memoIx = new TransactionInstruction({
+            keys: [{ pubkey: authority, isSigner: true, isWritable: true }],
+            programId: MEMO_PROGRAM_ID,
+            data: Buffer.from(`Logos Agent Registration: ${agentId}`, 'utf-8')
+        });
+
+        return await this.sendTransaction([ix, memoIx]);
     }
 
     async logDecision(decision: Decision): Promise<string> {
@@ -116,20 +125,44 @@ export class LogosAgent {
             { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ];
 
-        const ix = new TransactionInstruction({
+        const logIx = new TransactionInstruction({
             programId: this.programId,
             keys,
             data
         });
 
-        return await this.sendTransaction(ix);
+        // Add Memo
+        const memoObj: any = {
+            v: 1,
+            type: "logos_log",
+            action: decision.actionPlan,
+            status: "APPROVED"
+        };
+        if (decision.objectiveId.toUpperCase().includes("RUG") ||
+            (decision.actionPlan.action?.toString().includes("blocked"))) {
+            memoObj.status = "BLOCKED";
+        }
+
+        const memoIx = new TransactionInstruction({
+            keys: [{ pubkey: authority, isSigner: true, isWritable: true }],
+            programId: MEMO_PROGRAM_ID,
+            data: Buffer.from(JSON.stringify(memoObj), 'utf-8')
+        });
+
+        return await this.sendTransaction([logIx, memoIx]);
     }
 
-    private async sendTransaction(ix: TransactionInstruction): Promise<string> {
-        const tx = new Transaction().add(ix);
+    private async sendTransaction(ixs: TransactionInstruction | TransactionInstruction[]): Promise<string> {
+        const tx = new Transaction();
         const { blockhash } = await this.connection.getLatestBlockhash();
         tx.recentBlockhash = blockhash;
         tx.feePayer = this.authority;
+
+        if (Array.isArray(ixs)) {
+            tx.add(...ixs);
+        } else {
+            tx.add(ixs);
+        }
 
         if ('secretKey' in this.wallet) {
             return await sendAndConfirmTransaction(this.connection, tx, [this.wallet]);
@@ -147,7 +180,7 @@ const RPC_URL = "https://api.devnet.solana.com";
 const AUTHORITY_KEY_PATH = path.resolve(__dirname, "../../../keys/authority.json");
 
 async function main() {
-    console.log("🚀 Starting standalone demo...");
+    console.log("🚀 Starting standalone demo with MEMO support...");
 
     // Load Wallet
     const secret = JSON.parse(fs.readFileSync(AUTHORITY_KEY_PATH, 'utf-8'));
@@ -158,31 +191,25 @@ async function main() {
     const connection = new Connection(RPC_URL, "confirmed");
     const agent = new LogosAgent({ connection, wallet });
 
-    // Register
-    try {
-        console.log("📝 Registering Agent...");
-        const tx = await agent.registerAgent("DemoAgent_" + Date.now().toString().slice(-4));
-        console.log(`✅ Registered! TX: ${tx}`);
-    } catch (e: any) {
-        console.log(`⚠️ Register failed: ${e.message}`);
-    }
-
-    // Log
+    // 4. Log Decisions with Memo
     console.log("🚀 Logging Demo Decisions...");
+
     try {
         const tx1 = await agent.logDecision({
-            objectiveId: "SAFE_" + Date.now(),
+            objectiveId: "SAFE_TRD_" + Date.now(),
             observations: [],
-            actionPlan: { action: "swap" }
+            actionPlan: { action: "swap", amount: 0.5, pair: "SOL-USDC" }
         });
-        console.log(`✅ Safe Trade Logged: ${tx1}`);
+        console.log(`✅ Safe Trade Logged (with Memo): ${tx1}`);
 
+        // Rug Pull (Blocked)
         const tx2 = await agent.logDecision({
-            objectiveId: "RUG_" + Date.now(),
+            objectiveId: "RUG_PULL_" + Date.now(),
             observations: [],
-            actionPlan: { action: "blocked_transfer" }
+            actionPlan: { action: "blocked_transfer", amount: 10000, recipient: "BadActor" }
         });
-        console.log(`✅ Rug Pull Logged: ${tx2}`);
+        console.log(`✅ Rug Pull Logged (with Memo): ${tx2}`);
+
     } catch (e: any) {
         console.error(`❌ Logging failed: ${e.message}`);
     }

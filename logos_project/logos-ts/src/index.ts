@@ -3,20 +3,21 @@ import { Buffer } from 'buffer';
 import * as crypto from 'crypto';
 
 /**
- * Logos SDK for TypeScript (Updated for Day 5 Canonical Program)
- * Provides "Proof of Decision" logging on Solana.
+ * Logos SDK for TypeScript (Updated for Day 5 Canonical Program & Memo Support)
+ * Provides "Proof of Decision" logging on Solana with enhanced visibility via Memo.
  */
 
 // Constants
 const PROGRAM_ID_DEVNET = "3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6";
+const MEMO_PROGRAM_ID = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
 
-// Anchor Discriminators (Sighash: sha256("global:func_name")[:8])
+// Anchor Discriminators
 const DISCRIMINATOR_REGISTER = Buffer.from([135, 157, 66, 195, 2, 113, 175, 30]);
 const DISCRIMINATOR_LOG = Buffer.from([160, 73, 104, 176, 37, 115, 231, 204]);
 
 export interface LogosConfig {
     connection: Connection;
-    wallet?: any; // Adapter or Keypair
+    wallet?: any;
     programId?: string;
 }
 
@@ -38,15 +39,10 @@ export class LogosAgent {
         this.programId = new PublicKey(config.programId || PROGRAM_ID_DEVNET);
     }
 
-    // Helper to get Authority Pubkey whether wallet is Keypair or Adapter
     private get authority(): PublicKey {
         return this.wallet.publicKey || this.wallet.public_key;
     }
 
-    /**
-     * Calculate the Agent Account PDA
-     * Seeds: ["agent", authority]
-     */
     getAgentPda(authorityPubkey: PublicKey): PublicKey {
         const [pda] = PublicKey.findProgramAddressSync(
             [Buffer.from("agent"), authorityPubkey.toBuffer()],
@@ -55,10 +51,6 @@ export class LogosAgent {
         return pda;
     }
 
-    /**
-     * Calculate the Decision Record PDA
-     * Seeds: ["decision", agent_account, objective_id]
-     */
     getDecisionPda(agentAccountPda: PublicKey, objectiveId: string): PublicKey {
         const [pda] = PublicKey.findProgramAddressSync(
             [Buffer.from("decision"), agentAccountPda.toBuffer(), Buffer.from(objectiveId, 'utf8')],
@@ -67,26 +59,19 @@ export class LogosAgent {
         return pda;
     }
 
-    /**
-     * Register the agent on-chain. Required before logging decisions.
-     */
     async registerAgent(agentId: string): Promise<string> {
-        // Data: [Discriminator(8), AgentId(String)]
         const agentIdBuf = Buffer.from(agentId, 'utf8');
         const dataSize = 8 + (4 + agentIdBuf.length);
         const data = Buffer.alloc(dataSize);
 
-        // Pack Data
         let offset = 0;
         DISCRIMINATOR_REGISTER.copy(data, offset); offset += 8;
         data.writeUInt32LE(agentIdBuf.length, offset); offset += 4;
         agentIdBuf.copy(data, offset); offset += agentIdBuf.length;
 
-        // PDAs
         const authority = this.authority;
         const agentPda = this.getAgentPda(authority);
 
-        // Accounts: [agent_account, authority, system_program]
         const keys = [
             { pubkey: agentPda, isSigner: false, isWritable: true },
             { pubkey: authority, isSigner: true, isWritable: true },
@@ -99,14 +84,17 @@ export class LogosAgent {
             data
         });
 
-        return await this.sendTransaction(ix);
+        // Add Memo for registration visibility
+        const memoIx = new TransactionInstruction({
+            keys: [{ pubkey: authority, isSigner: true, isWritable: true }],
+            programId: MEMO_PROGRAM_ID,
+            data: Buffer.from(`Logos Agent Registration: ${agentId}`, 'utf-8')
+        });
+
+        return await this.sendTransaction([ix, memoIx]);
     }
 
-    /**
-     * Log a decision to the Logos program.
-     */
     async logDecision(decision: Decision): Promise<string> {
-        // 1. Hash the decision data (Proof of Decision)
         const decisionString = JSON.stringify({
             observations: decision.observations,
             action_plan: decision.actionPlan
@@ -115,8 +103,6 @@ export class LogosAgent {
 
         if (decision.dryRun) return `dry_run:${decisionHash}`;
 
-        // 2. Build Instruction Data
-        // Layout (lib.rs): decision_hash(String), objective_id(String)
         const hashBuf = Buffer.from(decisionHash, 'utf8');
         const objIdBuf = Buffer.from(decision.objectiveId, 'utf8');
 
@@ -126,52 +112,72 @@ export class LogosAgent {
         let offset = 0;
         DISCRIMINATOR_LOG.copy(data, offset); offset += 8;
 
-        // decision_hash
         data.writeUInt32LE(hashBuf.length, offset); offset += 4;
         hashBuf.copy(data, offset); offset += hashBuf.length;
 
-        // objective_id
         data.writeUInt32LE(objIdBuf.length, offset); offset += 4;
         objIdBuf.copy(data, offset); offset += objIdBuf.length;
 
-        // 3. Accounts & PDAs
         const authority = this.authority;
         const agentPda = this.getAgentPda(authority);
         const decisionPda = this.getDecisionPda(agentPda, decision.objectiveId);
 
-        // Accounts: [decision_record, agent_account, authority, system_program]
         const keys = [
             { pubkey: decisionPda, isSigner: false, isWritable: true },
-            { pubkey: agentPda, isSigner: false, isWritable: true }, // Must exist (mut)
+            { pubkey: agentPda, isSigner: false, isWritable: true },
             { pubkey: authority, isSigner: true, isWritable: true },
             { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ];
 
-        const ix = new TransactionInstruction({
+        const logIx = new TransactionInstruction({
             programId: this.programId,
             keys,
             data
         });
 
-        return await this.sendTransaction(ix);
+        // Enhanced Memo Logging
+        const memoObj = {
+            v: 1,
+            type: "logos_log",
+            action: decision.actionPlan,
+            status: "APPROVED"
+        };
+
+        // Auto-detect blocked status based on objective or action
+        if (decision.objectiveId.toUpperCase().includes("RUG") ||
+            decision.objectiveId.toUpperCase().includes("BLOCK") ||
+            (decision.actionPlan.action && decision.actionPlan.action.toString().includes("blocked"))) {
+            memoObj.status = "BLOCKED";
+        }
+
+        const memoIx = new TransactionInstruction({
+            keys: [{ pubkey: authority, isSigner: true, isWritable: true }],
+            programId: MEMO_PROGRAM_ID,
+            data: Buffer.from(JSON.stringify(memoObj), 'utf-8')
+        });
+
+        return await this.sendTransaction([logIx, memoIx]);
     }
 
-    private async sendTransaction(ix: TransactionInstruction): Promise<string> {
-        const tx = new Transaction().add(ix);
+    private async sendTransaction(ixs: TransactionInstruction | TransactionInstruction[]): Promise<string> {
+        const tx = new Transaction();
+        if (Array.isArray(ixs)) {
+            tx.add(...ixs);
+        } else {
+            tx.add(ixs);
+        }
+
         const { blockhash } = await this.connection.getLatestBlockhash();
         tx.recentBlockhash = blockhash;
         tx.feePayer = this.authority;
 
-        // Proper Type Check for Wallet Adapter vs Keypair
         if ('secretKey' in this.wallet) {
-            // It's a Keypair
             return await sendAndConfirmTransaction(this.connection, tx, [this.wallet]);
         } else if (typeof this.wallet.signTransaction === 'function') {
-            // Wallet Adapter
             const signedTx = await this.wallet.signTransaction(tx);
             return await this.connection.sendRawTransaction(signedTx.serialize());
         } else {
-            throw new Error("Wallet not supported: must be Keypair or Wallet Adapter");
+            throw new Error("Wallet not supported");
         }
     }
 }

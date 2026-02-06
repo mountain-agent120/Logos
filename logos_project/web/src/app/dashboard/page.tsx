@@ -332,20 +332,65 @@ export default function Home() {
         const timestamp = signatures[i].blockTime ? new Date(signatures[i].blockTime! * 1000).toLocaleString() : "Unknown";
 
         // Filter: Must involve Logos Program
-        const ix = tx.transaction.message.instructions.find((ix: any) =>
+        const logosIx = tx.transaction.message.instructions.find((ix: any) =>
           ix.programId.toString() === PROGRAM_ID.toString()
         ) as any;
 
-        if (ix) {
+        // Check for Memo (SPL Memo v2)
+        const memoIx = tx.transaction.message.instructions.find((ix: any) =>
+          ix.programId.toString() === "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+        ) as any;
+
+        if (logosIx) {
           let action = "Logos Interaction";
           let objective = "Unknown";
           let status = "APPROVED";
           let agent = tx.transaction.message.accountKeys[0].pubkey.toString().slice(0, 8) + "..."; // Payer
           let hash = "View Transaction";
 
-          // Heuristic: If parsing Memo or Data?
-          // For now, simple view
-          if (ix.data) action = "Logos Protocol Interaction"; // Can refine this later if needed
+          // Parse Memo for enhanced details
+          if (memoIx) {
+            // For getParsedTransaction, memo is often in 'parsed' field if supported, or 'data' if raw
+            // Memo v2 usually appears as generic instruction unless parsed specifically
+            // We assume raw data (Base58) if 'parsed' is missing, or string if parsed
+
+            let memoText = "";
+            if (memoIx.parsed) {
+              memoText = typeof memoIx.parsed === 'string' ? memoIx.parsed : JSON.stringify(memoIx.parsed);
+            } else if (memoIx.data) {
+              // Manual decode from Base58 (if needed, but web3.js parsed tx usually handles common programs)
+              // Assuming standard text
+              try {
+                // Simple heuristic: try to decode if it looks like base58
+                // But for now, let's rely on parsed or simple display
+                memoText = "Memo Found";
+              } catch (e) { }
+            }
+
+            if (memoText) {
+              try {
+                // Try to parse our JSON format
+                // Note: getParsedTransaction might return the memo text directly in 'parsed'
+                const jsonStart = memoText.indexOf('{');
+                const jsonEnd = memoText.lastIndexOf('}');
+                if (jsonStart >= 0 && jsonEnd > jsonStart) {
+                  const jsonStr = memoText.substring(jsonStart, jsonEnd + 1);
+                  const data = JSON.parse(jsonStr);
+
+                  if (data.status) status = data.status;
+                  if (data.action) action = typeof data.action === 'string' ? data.action : JSON.stringify(data.action);
+                  if (data.type === "logos_log") {
+                    // Verified Logos Memo
+                  }
+                } else {
+                  action = `Memo: ${memoText.slice(0, 50)}...`;
+                }
+              } catch (e) {
+                // Not JSON
+                action = `Memo: ${memoText.slice(0, 50)}...`;
+              }
+            }
+          }
 
           newLogs.push({
             sig,
