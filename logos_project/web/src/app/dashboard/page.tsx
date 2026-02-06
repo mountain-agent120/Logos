@@ -17,6 +17,38 @@ export default function Home() {
   const [amount, setAmount] = useState(10);
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
+
+  // Demo test data for wallet: 2FS7Rqxf36mTLTvoAH191CyWtPYXQc1fwAhu5VhsoLYc
+  const demoLogs = [
+    {
+      sig: "DEMO_TX_1",
+      hash: "12ffd1e1c1532c615ffc1ade03854c1165bdd097a9dd182fe7cc9ef681aae313",
+      status: "APPROVED",
+      timestamp: "2026-02-06 13:17:23",
+      action: "SWAP 1 SOL → 105 USDC",
+      agent: "YamakunDemoAgent",
+      objective: "DeFi-Swap-Policy-v1"
+    },
+    {
+      sig: "DEMO_TX_2",
+      hash: "cdb95b8c4b33810d3311a475c56372f665e5d282706ec2d9b19a228f64e0c5a8",
+      status: "APPROVED",
+      timestamp: "2026-02-06 13:17:23",
+      action: "VOTE YES on PROP-2024-001",
+      agent: "YamakunDemoAgent",
+      objective: "DAO-Governance-Policy-v1"
+    },
+    {
+      sig: "DEMO_TX_3",
+      hash: "e511c44324b93b25cdde2e5e722100ed3f0ad0a66277a9d197915b1895f7393b",
+      status: "BLOCKED",
+      timestamp: "2026-02-06 13:17:23",
+      action: "SWAP 10 SOL → BONK (25% slippage)",
+      agent: "YamakunDemoAgent",
+      objective: "DeFi-Swap-Policy-v1"
+    }
+  ];
 
   // Helper: Calculate SHA-256 Hash
   async function computeHash(data: any): Promise<string> {
@@ -134,7 +166,23 @@ export default function Home() {
       {/* Header */}
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "3rem", marginTop: "1rem" }}>
         <div className="logo">Logos <span>Dashboard</span></div>
-        <WalletMultiButton />
+        <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+          <button
+            onClick={() => setDemoMode(!demoMode)}
+            style={{
+              padding: "0.5rem 1rem",
+              background: demoMode ? "var(--primary)" : "#333",
+              color: "#fff",
+              border: "none",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "0.9rem"
+            }}
+          >
+            {demoMode ? "🎭 Demo Mode ON" : "Demo Mode"}
+          </button>
+          <WalletMultiButton />
+        </div>
       </header>
 
       <div className="grid">
@@ -191,12 +239,12 @@ export default function Home() {
           </h2>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            {logs.length === 0 ? (
+            {(demoMode ? demoLogs : logs).length === 0 ? (
               <div style={{ textAlign: "center", padding: "2rem", color: "#444", border: "1px dashed #333", borderRadius: "8px" }}>
                 No recent logs found.
               </div>
             ) : (
-              logs.map((log, i) => (
+              (demoMode ? demoLogs : logs).map((log, i) => (
                 <div key={i} style={{ background: "#111", padding: "1rem", borderRadius: "8px", borderLeft: `3px solid ${log.status === "APPROVED" ? "var(--success)" : "var(--error)"}` }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
                     <span className={`status-badge ${log.status === "APPROVED" ? "success" : "error"}`}>
@@ -204,6 +252,16 @@ export default function Home() {
                     </span>
                     <span style={{ fontSize: "0.8rem", color: "#666" }}>{log.timestamp}</span>
                   </div>
+                  {log.action && (
+                    <div style={{ fontSize: "0.85rem", color: "#ccc", marginBottom: "0.5rem" }}>
+                      📊 {log.action}
+                    </div>
+                  )}
+                  {log.agent && (
+                    <div style={{ fontSize: "0.75rem", color: "#666", marginBottom: "0.25rem" }}>
+                      Agent: {log.agent} | Policy: {log.objective}
+                    </div>
+                  )}
                   <div style={{ fontSize: "0.8rem", color: "#888", marginBottom: "0.25rem" }}>
                     PoD: <span style={{ fontFamily: "monospace", color: "#aaa" }}>{log.hash.substring(0, 16)}...</span>
                   </div>
