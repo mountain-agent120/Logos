@@ -1,0 +1,30 @@
+{
+  "name": "@logos-network/sdk",
+  "version": "0.1.0",
+  "description": "Logos SDK for TypeScript: Proof of Decision logging on Solana",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "solana",
+    "agent",
+    "logos",
+    "audit"
+  ],
+  "author": "Yamakun",
+  "license": "MIT",
+  "type": "commonjs",
+  "devDependencies": {
+    "@types/bn.js": "^5.2.0",
+    "@types/node": "^25.2.1",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.98.4",
+    "bn.js": "^5.2.2",
+    "buffer-layout": "^1.2.2"
+  }
+}
