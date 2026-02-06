@@ -148,13 +148,59 @@ logos/
 │   └── logos_core/          # Anchor smart contract (Rust)
 ├── sdk/
 │   ├── core.py              # Python SDK for decision hashing
-│   ├── onchain_utils.py     # Solana transaction builders
-│   └── batch_demo.py        # Multi-protocol observation example
+│   └── onchain_utils.py     # Solana transaction builders
+├── logos-ts/                # **(New)** TypeScript SDK
+│   ├── src/                 # JS/TS Agent Logic
+│   └── README.md            # SDK Integration Guide
+├── web/                     # **(New)** Compliance Dashboard Demo
+│   ├── src/                 # Next.js App Router
+│   └── README.md            # Web Demo Guide
 ├── api_server.py            # REST API for HTTP integration
-├── scripts/
-│   └── verify_deployment.py # E2E test script
-├── ARCHITECTURE.md          # Technical deep dive
-└── README.md                # You are here
+└── ...
+```
+
+---
+
+## 🚀 Web Dashboard (Compliance Demo)
+
+We've built a **Proof of Compliance** interactive dashboard.
+Connect your Phantom/Solflare wallet and log compliance decisions directly to Devnet.
+
+```bash
+cd web
+npm install
+npm run dev
+# Open http://localhost:3000
+```
+
+- **Features**: Wallet Integration, AML Check Simulation, On-Chain Logging.
+- **Stack**: Next.js 15, Solana Wallet Adapter, Tailwind (Custom).
+
+---
+
+## 📦 TypeScript SDK
+
+AgentDEX and other dApps can now integrate Logos natively using our TypeScript SDK.
+
+**Installation**:
+```bash
+# From local source
+npm install ./logos-ts
+```
+
+**Brief Usage**:
+```typescript
+import { LogosAgent } from '@logos-network/sdk';
+
+// Initialize
+const agent = new LogosAgent(connection, wallet);
+
+// Log Decision
+await agent.logDecision({
+    objective_id: "trade_101",
+    observations: [{...}],
+    action_plan: { action: "SWAP" }
+});
 ```
 
 ---
