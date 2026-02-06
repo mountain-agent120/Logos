@@ -225,83 +225,91 @@ export default function Home() {
         if (err.message.includes("User rejected")) msg = "Transaction rejected by user.";
         else if (err.message.includes("simulation")) msg = "Simulation failed. Please verify your wallet balance (Devnet SOL needed).";
       }
-      if (err.logs) {
-        console.log("Simulation logs:", err.logs);
-      }
-
       alert(`Error: ${msg}\n\nCheck console for details.`);
     } finally {
       setLoading(false);
     }
   };
 
-  // Effect: Global Activity Feed (Fetch transactions for PROGRAM_ID)
+  // State for Tabs
+  const [activeTab, setActiveTab] = useState<"my" | "global">("global");
+
+  // Auto-switch tab on connect
   useEffect(() => {
+    if (publicKey) setActiveTab("my");
+    else setActiveTab("global");
+  }, [publicKey]);
+
+  // Fetch Logic
+  const fetchLogs = async () => {
     if (!connection) return;
 
-    const fetchGlobalLogs = async () => {
-      try {
-        // Fetch recent transactions for the Logos Program
-        const signatures = await connection.getSignaturesForAddress(PROGRAM_ID, { limit: 20 });
+    try {
+      let signatures = [];
 
-        const newLogs: any[] = [];
-
-        // Parallel fetch for speed
-        const txs = await connection.getParsedTransactions(signatures.map(s => s.signature), { maxSupportedTransactionVersion: 0 });
-
-        txs.forEach((tx, i) => {
-          if (!tx || tx.meta?.err) return;
-
-          const sig = signatures[i].signature;
-          const timestamp = signatures[i].blockTime ? new Date(signatures[i].blockTime! * 1000).toLocaleString() : "Unknown";
-
-          // Determine type of interaction
-          // We look for instructions calling our program
-          const ix = tx.transaction.message.instructions.find((ix: any) =>
-            ix.programId.toString() === PROGRAM_ID.toString()
-          ) as any;
-
-          if (ix) {
-            // Try to decode data
-            // We can't easily decode base58 data from getParsedTransactions without a library or manual Buffer decoding from base58.
-            // But we can infer "Action"
-
-            let action = "Unknown Interaction";
-            let objective = "Unknown";
-
-            // Simple heuristic based on data size or just label it
-            // If we had the data buffer, we could check discriminator.
-
-            if (ix.data) {
-              // If we can get data, great. Usually it comes as base58 string in parsed tx if not fully decoded by RPC
-              // We'll mark it as a "Logos Interaction"
-              action = "Logos Protocol Interaction";
-            }
-
-            newLogs.push({
-              sig,
-              hash: "View On-Chain", // We don't have the hash easily without full decoding
-              status: "CONFIRMED",
-              timestamp,
-              action,
-              agent: tx.transaction.message.accountKeys[0].pubkey.toString().slice(0, 8) + "...", // Signer (Payer)
-              objective
-            });
-          }
-        });
-
-        if (newLogs.length > 0) {
-          setLogs(newLogs);
-        }
-      } catch (e) {
-        console.error("Fetch error:", e);
+      if (activeTab === "my" && publicKey) {
+        // Fetch User Logs
+        signatures = await connection.getSignaturesForAddress(publicKey, { limit: 20 });
+      } else {
+        // Fetch Global Logs
+        signatures = await connection.getSignaturesForAddress(PROGRAM_ID, { limit: 20 });
       }
-    };
 
-    fetchGlobalLogs();
-    const interval = setInterval(fetchGlobalLogs, 10000);
+      const txs = await connection.getParsedTransactions(signatures.map(s => s.signature), { maxSupportedTransactionVersion: 0 });
+
+      const newLogs: any[] = [];
+
+      txs.forEach((tx, i) => {
+        if (!tx || tx.meta?.err) return;
+
+        const sig = signatures[i].signature;
+        const timestamp = signatures[i].blockTime ? new Date(signatures[i].blockTime! * 1000).toLocaleString() : "Unknown";
+
+        // Filter: Must involve Logos Program
+        const ix = tx.transaction.message.instructions.find((ix: any) =>
+          ix.programId.toString() === PROGRAM_ID.toString()
+        ) as any;
+
+        if (ix) {
+          let action = "Logos Interaction";
+          let objective = "Unknown";
+          let status = "CONFIRMED";
+          let agent = tx.transaction.message.accountKeys[0].pubkey.toString().slice(0, 8) + "..."; // Payer
+          let hash = "View Transaction";
+
+          // Heuristic: If parsing Memo or Data?
+          // For now, simple view
+          if (ix.data) action = "Logos Protocol Interaction"; // Can refine this later if needed
+
+          newLogs.push({
+            sig,
+            hash,
+            status,
+            timestamp,
+            action,
+            agent,
+            objective
+          });
+        }
+      });
+
+      if (newLogs.length > 0) {
+        setLogs(newLogs);
+      } else if (activeTab === "my") {
+        // If no logs found for user, maybe empty
+        setLogs([]);
+      }
+
+    } catch (e) {
+      console.error("Fetch error:", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 10000);
     return () => clearInterval(interval);
-  }, [connection]);
+  }, [connection, activeTab, publicKey]);
 
   return (
     <main className="container">
@@ -378,15 +386,47 @@ export default function Home() {
 
         {/* Live Logs Card */}
         <section className="card">
-          <h2 style={{ marginBottom: "1.5rem", display: "flex", justifyContent: "space-between" }}>
-            📜 On-Chain Logs
-            <span style={{ fontSize: "0.9rem", fontWeight: "normal", color: "#666" }}>Devnet</span>
-          </h2>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+            <h2>📜 On-Chain Logs</h2>
+            <div style={{ display: "flex", gap: "0.5rem", background: "#222", padding: "0.25rem", borderRadius: "8px" }}>
+              <button
+                onClick={() => setActiveTab("my")}
+                disabled={!publicKey}
+                style={{
+                  padding: "0.4rem 0.8rem",
+                  background: activeTab === "my" ? "#444" : "transparent",
+                  color: activeTab === "my" ? "#fff" : (publicKey ? "#888" : "#444"),
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: publicKey ? "pointer" : "not-allowed",
+                  fontSize: "0.8rem",
+                  transition: "all 0.2s"
+                }}
+              >
+                My Logs
+              </button>
+              <button
+                onClick={() => setActiveTab("global")}
+                style={{
+                  padding: "0.4rem 0.8rem",
+                  background: activeTab === "global" ? "#444" : "transparent",
+                  color: activeTab === "global" ? "#fff" : "#888",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontSize: "0.8rem",
+                  transition: "all 0.2s"
+                }}
+              >
+                Global Feed
+              </button>
+            </div>
+          </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
             {(demoMode ? DEMO_LOGS : logs).length === 0 ? (
               <div style={{ textAlign: "center", padding: "2rem", color: "#444", border: "1px dashed #333", borderRadius: "8px" }}>
-                No recent logs found.
+                {activeTab === "my" ? "No recent logs found for your wallet." : "No global logs found (Devnet is quiet today)."}
               </div>
             ) : (
               (demoMode ? DEMO_LOGS : logs).map((log: any, i: number) => (
