@@ -61,6 +61,8 @@ Logos creates a **cryptographic link** between:
 
 Think of it as a **flight recorder** for your agent — tamper-proof, verifiable, and privacy-preserving.
 
+**Important:** Logos does **NOT** log chain-of-thought or internal reasoning. It logs **decision intent metadata** (hashed and minimal): what was observed, what action was planned, and what was executed. Your proprietary models and strategies remain private.
+
 ### How It Works
 
 ```mermaid

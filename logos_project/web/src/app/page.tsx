@@ -67,10 +67,15 @@ export default function LandingPage() {
                         </span>
                     </h1>
 
-                    <p className="text-lg md:text-2xl text-gray-400 max-w-2xl mx-auto mb-12 leading-relaxed">
+                    <p className="text-lg md:text-2xl text-gray-400 max-w-2xl mx-auto mb-4 leading-relaxed">
                         Don't just trust your autonomous agents. <strong>Verify them.</strong><br />
                         Logos provides the immutable audit layer for the agent economy.
                     </p>
+
+                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-sm font-medium mb-12">
+                        <span className="text-lg">⏰</span>
+                        <span>Agents are moving real money. Regulators are watching. Build trust NOW.</span>
+                    </div>
 
                     <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
                         <Link href="/dashboard">
@@ -112,6 +117,142 @@ export default function LandingPage() {
                             </motion.div>
                         ))}
                     </div>
+                </div>
+            </section>
+
+            {/* Why Logos? Section */}
+            <section className="py-24 px-6 border-t border-white/5">
+                <div className="max-w-6xl mx-auto">
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        className="text-center mb-16"
+                    >
+                        <h2 className="text-4xl md:text-5xl font-bold mb-6">
+                            Why <span className="text-cyan-500">Logos</span>?
+                        </h2>
+                        <p className="text-xl text-gray-400 max-w-3xl mx-auto">
+                            When your agent makes a $1M trade at 3am, can you prove what it saw and why it acted?
+                        </p>
+                    </motion.div>
+
+                    <div className="grid md:grid-cols-2 gap-8">
+                        {/* Without Logos */}
+                        <motion.div
+                            initial={{ opacity: 0, x: -30 }}
+                            whileInView={{ opacity: 1, x: 0 }}
+                            viewport={{ once: true }}
+                            className="p-8 rounded-2xl bg-red-500/5 border border-red-500/20"
+                        >
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center">
+                                    <span className="text-2xl">❌</span>
+                                </div>
+                                <h3 className="text-2xl font-bold text-red-400">Without Logos</h3>
+                            </div>
+                            <ul className="space-y-4 text-gray-300">
+                                <li className="flex items-start gap-3">
+                                    <span className="text-red-500 mt-1">•</span>
+                                    <span><strong>No proof</strong> of what the agent observed</span>
+                                </li>
+                                <li className="flex items-start gap-3">
+                                    <span className="text-red-500 mt-1">•</span>
+                                    <span><strong>No record</strong> of decision reasoning</span>
+                                </li>
+                                <li className="flex items-start gap-3">
+                                    <span className="text-red-500 mt-1">•</span>
+                                    <span><strong>No way</strong> to verify policy compliance</span>
+                                </li>
+                                <li className="flex items-start gap-3">
+                                    <span className="text-red-500 mt-1">•</span>
+                                    <span><strong>Liability</strong> falls on... who?</span>
+                                </li>
+                            </ul>
+                            <div className="mt-6 p-4 bg-black/30 rounded-lg border border-red-500/10">
+                                <p className="text-sm text-gray-400 italic">
+                                    "The AI did it" — No accountability, no trust, no scale.
+                                </p>
+                            </div>
+                        </motion.div>
+
+                        {/* With Logos */}
+                        <motion.div
+                            initial={{ opacity: 0, x: 30 }}
+                            whileInView={{ opacity: 1, x: 0 }}
+                            viewport={{ once: true }}
+                            className="p-8 rounded-2xl bg-cyan-500/5 border border-cyan-500/20"
+                        >
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="w-12 h-12 rounded-full bg-cyan-500/10 flex items-center justify-center">
+                                    <CheckCircle className="w-6 h-6 text-cyan-500" />
+                                </div>
+                                <h3 className="text-2xl font-bold text-cyan-400">With Logos</h3>
+                            </div>
+                            <ul className="space-y-4 text-gray-300">
+                                <li className="flex items-start gap-3">
+                                    <CheckCircle className="w-5 h-5 text-cyan-500 mt-0.5 flex-shrink-0" />
+                                    <span><strong>Immutable record</strong> of observations</span>
+                                </li>
+                                <li className="flex items-start gap-3">
+                                    <CheckCircle className="w-5 h-5 text-cyan-500 mt-0.5 flex-shrink-0" />
+                                    <span><strong>Decision hash</strong> proves intent</span>
+                                </li>
+                                <li className="flex items-start gap-3">
+                                    <CheckCircle className="w-5 h-5 text-cyan-500 mt-0.5 flex-shrink-0" />
+                                    <span><strong>Audit trail</strong> verifies policy adherence</span>
+                                </li>
+                                <li className="flex items-start gap-3">
+                                    <CheckCircle className="w-5 h-5 text-cyan-500 mt-0.5 flex-shrink-0" />
+                                    <span><strong>Clear liability</strong>: Agent vs. External attack</span>
+                                </li>
+                            </ul>
+                            <div className="mt-6 p-4 bg-black/30 rounded-lg border border-cyan-500/10">
+                                <p className="text-sm text-cyan-400 font-medium">
+                                    "Trust, but Verify." — Accountability, trust, scale.
+                                </p>
+                            </div>
+                        </motion.div>
+                    </div>
+
+                    {/* Real Scenario */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        className="mt-12 p-8 rounded-2xl bg-neutral-900/50 border border-white/5"
+                    >
+                        <h4 className="text-xl font-bold mb-4 flex items-center gap-2">
+                            <span className="text-2xl">🚨</span>
+                            Real Scenario: The $10M Mystery Trade
+                        </h4>
+                        <div className="grid md:grid-cols-2 gap-6 text-gray-300">
+                            <div>
+                                <p className="mb-4">
+                                    <strong className="text-white">3:00 AM, Tuesday</strong><br />
+                                    Your DeFi agent executes a $10M swap: SOL → USDC<br />
+                                    Slippage: 15% (expected: 0.5%)<br />
+                                    <span className="text-red-400">Loss: $1.5M</span>
+                                </p>
+                                <p className="text-sm text-gray-400">
+                                    Was it a bug? A hack? A hallucination?
+                                </p>
+                            </div>
+                            <div className="bg-black/30 p-4 rounded-lg border border-cyan-500/10">
+                                <p className="text-sm mb-2 text-cyan-400 font-mono">Logos Audit Trail:</p>
+                                <ul className="text-xs space-y-1 text-gray-400 font-mono">
+                                    <li>✓ Agent saw Jupiter quote: 0.5% slippage</li>
+                                    <li>✓ Decision hash proves intent: 0.5%</li>
+                                    <li>✓ Policy compliance: PASSED</li>
+                                    <li className="text-cyan-400">→ Conclusion: External MEV attack</li>
+                                </ul>
+                                <p className="mt-3 text-xs text-green-400">
+                                    ✓ Developer liability cleared<br />
+                                    ✓ Insurance claim approved
+                                </p>
+                            </div>
+                        </div>
+                    </motion.div>
                 </div>
             </section>
 
