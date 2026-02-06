@@ -286,8 +286,8 @@ export default function Home() {
 
   // Fetch Logic
   const fetchLogs = async () => {
-    // Explicitly use Devnet for logs to prevent Mainnet wallet confusion
-    const devConnection = new Connection("https://api.devnet.solana.com", "confirmed");
+    // Explicitly use Helius RPC for logs to avoid rate limits
+    const devConnection = new Connection("https://devnet.helius-rpc.com/?api-key=4bc3bcef-b068-47c7-bd21-41b0d2db75b6", "confirmed");
 
     try {
       let signatures = [];
@@ -365,7 +365,7 @@ export default function Home() {
   // Polling for Logs (Adaptive: 15 seconds)
   useEffect(() => {
     fetchLogs();
-    const interval = setInterval(fetchLogs, 15000);
+    const interval = setInterval(fetchLogs, 30000);
     return () => clearInterval(interval);
   }, [activeTab, publicKey]);
 

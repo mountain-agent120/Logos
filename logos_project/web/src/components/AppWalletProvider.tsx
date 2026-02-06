@@ -23,7 +23,7 @@ export default function AppWalletProvider({
     }, []);
 
     const network = WalletAdapterNetwork.Devnet;
-    const endpoint = useMemo(() => "https://api.devnet.solana.com", []);
+    const endpoint = useMemo(() => "https://devnet.helius-rpc.com/?api-key=4bc3bcef-b068-47c7-bd21-41b0d2db75b6", []);
 
     // Explicitly add wallets
     const wallets = useMemo(() => [
