@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey, Transaction, TransactionInstruction, SystemProgram } from "@solana/web3.js";
-// import { Buffer } from "buffer"; // Avoiding Buffer for browser compatibility if possible
+import { Buffer } from "buffer";
 
 // Constants
 const PROGRAM_ID = new PublicKey("Ldm2tof9CHcyaHWh3nBkwiWNGYN8rG5tex7NMbHQxG3");
@@ -58,15 +58,13 @@ export default function Home() {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  // ... (previous helper functions)
-
   // Helper: Decode On-Chain Account Data
   const decodeAccountData = (data: Buffer, pubkey: PublicKey) => {
     try {
       // Skip discriminator (8 bytes)
       let offset = 8;
 
-      // Read Hash
+      // Read Hash (String: len + bytes)
       const hashLen = data.readUInt32LE(offset);
       offset += 4;
       const hash = data.subarray(offset, offset + hashLen).toString('utf-8');
@@ -83,161 +81,132 @@ export default function Home() {
         pubkey: pubkey.toString()
       };
     } catch (e) {
-      console.error("Failed to decode account:", e);
+      // console.error("Failed to decode account:", e); // Expected for other account types
       return null;
     }
   };
 
-  // Effect: Poll for On-Chain Data
-  useEffect(() => {
-    const fetchLogs = async () => {
-      // Don't poll if no connection, or if connection is just generic (though we can read devnet without wallet)
-      // "connection" is available from useConnection hook
-
-      try {
-        // Fetch all accounts owned by our program
-        // Filter out if needed. Since we don't know exact size, we fetch all.
-        // Be careful in prod with large data sets.
-        const rawAccounts = await connection.getProgramAccounts(PROGRAM_ID);
-
-        const decodedLogs = rawAccounts.map(acc => {
-          // Basic decoding attempt
-          const decoded = decodeAccountData(acc.account.data as Buffer, acc.pubkey);
-          return decoded ? {
-            sig: "ON_CHAIN_DATA",
-            hash: decoded.hash,
-            status: "VERIFIED", // On-chain means it's finalized
-            timestamp: "Synced from Chain",
-            action: "DECISION LOGGED",
-            agent: "On-Chain Agent",
-            objective: decoded.objective,
-            pubkey: decoded.pubkey
-          } : null;
-        }).filter((log): log is any => log !== null);
-
-        if (decodedLogs.length > 0) {
-          // Combine with local logs, filtering duplicates by hash if possible
-          // For this demo, we'll prefix on-chain logs
-          setLogs(prev => {
-            const existingHashes = new Set(prev.map(l => l.hash));
-            const newLogs = decodedLogs.filter(l => !existingHashes.has(l.hash));
-            return [...newLogs, ...prev];
-          });
-        }
-
-      } catch (err) {
-        console.error("Error fetching logs:", err);
-      }
-    };
-
-    // Poll every 10 seconds
-    const interval = setInterval(fetchLogs, 10000);
-    fetchLogs(); // Initial fetch
-
-    return () => clearInterval(interval);
-  }, [connection]);
-
-  // Action: Scan & Log
+  // Action: Scan & Log (Real Logos Program Interaction)
   const handleScanAndLog = async () => {
     if (!publicKey) return;
     setLoading(true);
 
     try {
-      // 1. Mock Compliance Check
-      const checkResult = {
-        passed: amount < 1000,
-        reason: amount < 1000 ? "OK" : "AML_RISK_HIGH",
-        timestamp: Date.now()
-      };
-
+      // 1. Create Decision Data
       const decision = {
-        objective_id: `WEB_DEMO_${Date.now()}`,
-        observations: [{ source: "web_scanner", data: checkResult }],
-        action_plan: {
-          action: checkResult.passed ? "APPROVE" : "BLOCK",
-          target: recipient,
-          amount: amount
-        }
+        agent: "YamakunAgent",
+        action: amount > 100 ? "BLOCK" : "APPROVE",
+        target: recipient,
+        reason: amount > 100 ? "Amount exceeds limit" : "Compliance check passed",
+        timestamp: new Date().toISOString()
       };
 
-      // 2. Compute Proof of Decision (PoD)
+      // 2. Compute Hash
       const decisionHash = await computeHash(decision);
-      console.log("Decision Hash:", decisionHash);
 
-      // 3. Build Instruction
-      // log_decision discriminator: [160, 73, 104, 176, 37, 115, 231, 204]
-      const discriminator = new Uint8Array([160, 73, 104, 176, 37, 115, 231, 204]);
+      // 3. Create Memo Instruction
+      // Format: "LOGOS:v1:<HASH>:<JSON_DATA>"
+      const memoContent = `LOGOS:v1:${decisionHash}:${JSON.stringify(decision)}`;
 
-      // Serialize args: hash(string) + objectiveId(string)
-      // String format: len(u32-le) + bytes
-      const encoder = new TextEncoder();
-      const hashBytes = encoder.encode(decisionHash);
-      const objIdBytes = encoder.encode(decision.objective_id);
-
-      const hashLen = new Uint8Array(4);
-      new DataView(hashLen.buffer).setUint32(0, hashBytes.length, true);
-
-      const objIdLen = new Uint8Array(4);
-      new DataView(objIdLen.buffer).setUint32(0, objIdBytes.length, true);
-
-      const data = new Uint8Array(
-        discriminator.length +
-        4 + hashBytes.length +
-        4 + objIdBytes.length
-      );
-
-      let offset = 0;
-      data.set(discriminator, offset); offset += 8;
-      data.set(hashLen, offset); offset += 4;
-      data.set(hashBytes, offset); offset += hashBytes.length;
-      data.set(objIdLen, offset); offset += 4;
-      data.set(objIdBytes, offset); offset += objIdBytes.length;
-
-      // PDAs
-      // agent_pda = ["agent", authority]
-      // Use TextEncoder for seeds to avoid Buffer issues
-      const [agentPda] = PublicKey.findProgramAddressSync(
-        [new TextEncoder().encode("agent"), publicKey.toBuffer()],
-        PROGRAM_ID
-      );
-
-      // decision_pda = ["decision", agent_pda, objective_id]
-      const [decisionPda] = PublicKey.findProgramAddressSync(
-        [new TextEncoder().encode("decision"), agentPda.toBuffer(), new TextEncoder().encode(decision.objective_id)],
-        PROGRAM_ID
-      );
-
-      const ix = new TransactionInstruction({
-        programId: PROGRAM_ID,
-        keys: [
-          { pubkey: decisionPda, isSigner: false, isWritable: true },
-          { pubkey: agentPda, isSigner: false, isWritable: true },
-          { pubkey: publicKey, isSigner: true, isWritable: true },
-          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-        ],
-        data: Buffer.from(data) // @solana/web3.js instructions expect Buffer or compatible
+      const memoInstruction = new TransactionInstruction({
+        keys: [{ pubkey: publicKey, isSigner: true, isWritable: true }],
+        programId: new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcQb"),
+        data: Buffer.from(new TextEncoder().encode(memoContent)),
       });
 
-      const tx = new Transaction().add(ix);
-      const sig = await sendTransaction(tx, connection);
+      const tx = new Transaction().add(memoInstruction);
 
+      // 4. Send Transaction
+      const sig = await sendTransaction(tx, connection);
       console.log("Tx Signature:", sig);
 
-      // Update UI
+      // 5. Optimistic UI Update
       setLogs(prev => [{
         sig,
         hash: decisionHash,
-        status: checkResult.passed ? "APPROVED" : "BLOCKED",
-        timestamp: new Date().toLocaleTimeString()
+        status: decision.action === "APPROVE" ? "APPROVED" : "BLOCKED",
+        timestamp: "Just Now",
+        action: `Action: ${decision.action} -> ${recipient}`,
+        agent: "You (Simulator)",
+        objective: "Demo-Policy"
       }, ...prev]);
 
-    } catch (err) {
-      console.error("Error:", err);
-      // alert("Error logging decision. Make sure your agent is registered first? (In this demo assuming yes)");
+    } catch (err: any) {
+      console.error("Error logging decision:", err);
+
+      // User-friendly error handling
+      let msg = "Transaction failed.";
+      if (err.message) {
+        if (err.message.includes("User rejected")) msg = "Transaction rejected by user.";
+        else if (err.message.includes("simulation")) msg = "Simulation failed. Please verify your wallet balance (Devnet SOL needed).";
+      }
+      if (err.logs) {
+        console.log("Simulation logs:", err.logs);
+        // Check for specific anchor errors if possible
+      }
+
+      alert(`Error: ${msg}\n\nCheck console for details.`);
     } finally {
       setLoading(false);
     }
   };
+
+  // Effect: Fetch Logs (Poll for accounts owned by program)
+  // We revert to checking program accounts because 'getParsedTransaction' for custom programs
+  // won't show inner instruction details easily unless we define a parser.
+  // Fetching program accounts is more robust for "Show me all logs on chain".
+  useEffect(() => {
+    if (!connection) return;
+
+    const fetchLogs = async () => {
+      try {
+        // Fetch DecisionRecord accounts (size check or discriminator check)
+        // DecisionRecord size: 8 + 32 + (4+64) + (4+len) + 8. Min size > 100.
+        // We'll just fetch all and filter by discriminator.
+        const accounts = await connection.getProgramAccounts(PROGRAM_ID);
+
+        const validLogs: any[] = [];
+
+        for (const acc of accounts) {
+          const data = acc.account.data as Buffer;
+          if (data.length < 8) continue;
+
+          // Check discriminator for DecisionRecord:
+          // No easy way to know exact discriminator without IDL gen, but expected is unique.
+          // Let's assume decoding works if schema matches.
+
+          const decoded = decodeAccountData(data, acc.pubkey);
+          if (decoded) {
+            validLogs.push({
+              sig: "ON_CHAIN", // We don't have the sig here easily without more queries
+              hash: decoded.hash,
+              status: "VERIFIED",
+              timestamp: "Synced",
+              action: "DECISION LOGGED",
+              agent: "Logos Agent",
+              objective: decoded.objective,
+              pubkey: decoded.pubkey
+            });
+          }
+        }
+
+        if (validLogs.length > 0) {
+          setLogs(prev => {
+            // De-duplicate based on pubkey
+            const existingKeys = new Set(prev.map(l => l.pubkey));
+            const newLogs = validLogs.filter(l => !existingKeys.has(l.pubkey));
+            return [...newLogs, ...prev];
+          });
+        }
+      } catch (e) {
+        console.error("Fetch error:", e);
+      }
+    };
+
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 10000);
+    return () => clearInterval(interval);
+  }, [connection]);
 
   return (
     <main className="container">
@@ -264,9 +233,12 @@ export default function Home() {
       </header>
 
       <div className="grid">
-        {/* Compliance Scanner Card */}
+        {/* Simulator Card */}
         <section className="card">
-          <h2 style={{ marginBottom: "1.5rem" }}>🛡️ Compliance Scanner</h2>
+          <h2 style={{ marginBottom: "1.5rem" }}>🤖 Agent Decision Simulator</h2>
+          <p style={{ fontSize: "0.9rem", color: "#888", marginBottom: "1rem" }}>
+            Simulate an agent making a compliance-checked decision. Approvals and Rejections are logged on-chain (Memo).
+          </p>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
             <div>
@@ -288,7 +260,7 @@ export default function Home() {
                 style={{ width: "100%", padding: "0.75rem", background: "#222", border: "1px solid #444", color: "#fff", borderRadius: "8px" }}
               />
               <p style={{ fontSize: "0.8rem", color: "#666", marginTop: "0.25rem" }}>
-                Limit: 1000 SOL (AML Rule)
+                Limit: 100 SOL (AML Rule)
               </p>
             </div>
 
@@ -298,7 +270,7 @@ export default function Home() {
               disabled={!publicKey || loading}
               style={{ marginTop: "1rem", opacity: (!publicKey || loading) ? 0.5 : 1 }}
             >
-              {loading ? "Processing..." : "Scan & Log Decision"}
+              {loading ? "Processing..." : "Simulate & Log Decision"}
             </button>
 
             {!publicKey && (
