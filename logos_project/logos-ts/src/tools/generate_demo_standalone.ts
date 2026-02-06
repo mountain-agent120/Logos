@@ -1,22 +1,17 @@
 import { Connection, PublicKey, Transaction, TransactionInstruction, SystemProgram, Keypair, sendAndConfirmTransaction } from '@solana/web3.js';
 import { Buffer } from 'buffer';
 import * as crypto from 'crypto';
-
-/**
- * Logos SDK for TypeScript (Updated for Day 5 Canonical Program)
- * Provides "Proof of Decision" logging on Solana.
- */
+import * as fs from 'fs';
+import * as path from 'path';
 
 // Constants
 const PROGRAM_ID_DEVNET = "3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6";
-
-// Anchor Discriminators (Sighash: sha256("global:func_name")[:8])
 const DISCRIMINATOR_REGISTER = Buffer.from([135, 157, 66, 195, 2, 113, 175, 30]);
 const DISCRIMINATOR_LOG = Buffer.from([160, 73, 104, 176, 37, 115, 231, 204]);
 
 export interface LogosConfig {
     connection: Connection;
-    wallet?: any; // Adapter or Keypair
+    wallet?: any;
     programId?: string;
 }
 
@@ -38,15 +33,10 @@ export class LogosAgent {
         this.programId = new PublicKey(config.programId || PROGRAM_ID_DEVNET);
     }
 
-    // Helper to get Authority Pubkey whether wallet is Keypair or Adapter
     private get authority(): PublicKey {
         return this.wallet.publicKey || this.wallet.public_key;
     }
 
-    /**
-     * Calculate the Agent Account PDA
-     * Seeds: ["agent", authority]
-     */
     getAgentPda(authorityPubkey: PublicKey): PublicKey {
         const [pda] = PublicKey.findProgramAddressSync(
             [Buffer.from("agent"), authorityPubkey.toBuffer()],
@@ -55,10 +45,6 @@ export class LogosAgent {
         return pda;
     }
 
-    /**
-     * Calculate the Decision Record PDA
-     * Seeds: ["decision", agent_account, objective_id]
-     */
     getDecisionPda(agentAccountPda: PublicKey, objectiveId: string): PublicKey {
         const [pda] = PublicKey.findProgramAddressSync(
             [Buffer.from("decision"), agentAccountPda.toBuffer(), Buffer.from(objectiveId, 'utf8')],
@@ -67,26 +53,19 @@ export class LogosAgent {
         return pda;
     }
 
-    /**
-     * Register the agent on-chain. Required before logging decisions.
-     */
     async registerAgent(agentId: string): Promise<string> {
-        // Data: [Discriminator(8), AgentId(String)]
         const agentIdBuf = Buffer.from(agentId, 'utf8');
         const dataSize = 8 + (4 + agentIdBuf.length);
         const data = Buffer.alloc(dataSize);
 
-        // Pack Data
         let offset = 0;
         DISCRIMINATOR_REGISTER.copy(data, offset); offset += 8;
         data.writeUInt32LE(agentIdBuf.length, offset); offset += 4;
         agentIdBuf.copy(data, offset); offset += agentIdBuf.length;
 
-        // PDAs
         const authority = this.authority;
         const agentPda = this.getAgentPda(authority);
 
-        // Accounts: [agent_account, authority, system_program]
         const keys = [
             { pubkey: agentPda, isSigner: false, isWritable: true },
             { pubkey: authority, isSigner: true, isWritable: true },
@@ -102,11 +81,7 @@ export class LogosAgent {
         return await this.sendTransaction(ix);
     }
 
-    /**
-     * Log a decision to the Logos program.
-     */
     async logDecision(decision: Decision): Promise<string> {
-        // 1. Hash the decision data (Proof of Decision)
         const decisionString = JSON.stringify({
             observations: decision.observations,
             action_plan: decision.actionPlan
@@ -115,8 +90,6 @@ export class LogosAgent {
 
         if (decision.dryRun) return `dry_run:${decisionHash}`;
 
-        // 2. Build Instruction Data
-        // Layout (lib.rs): decision_hash(String), objective_id(String)
         const hashBuf = Buffer.from(decisionHash, 'utf8');
         const objIdBuf = Buffer.from(decision.objectiveId, 'utf8');
 
@@ -126,23 +99,19 @@ export class LogosAgent {
         let offset = 0;
         DISCRIMINATOR_LOG.copy(data, offset); offset += 8;
 
-        // decision_hash
         data.writeUInt32LE(hashBuf.length, offset); offset += 4;
         hashBuf.copy(data, offset); offset += hashBuf.length;
 
-        // objective_id
         data.writeUInt32LE(objIdBuf.length, offset); offset += 4;
         objIdBuf.copy(data, offset); offset += objIdBuf.length;
 
-        // 3. Accounts & PDAs
         const authority = this.authority;
         const agentPda = this.getAgentPda(authority);
         const decisionPda = this.getDecisionPda(agentPda, decision.objectiveId);
 
-        // Accounts: [decision_record, agent_account, authority, system_program]
         const keys = [
             { pubkey: decisionPda, isSigner: false, isWritable: true },
-            { pubkey: agentPda, isSigner: false, isWritable: true }, // Must exist (mut)
+            { pubkey: agentPda, isSigner: false, isWritable: true },
             { pubkey: authority, isSigner: true, isWritable: true },
             { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ];
@@ -162,16 +131,61 @@ export class LogosAgent {
         tx.recentBlockhash = blockhash;
         tx.feePayer = this.authority;
 
-        // Proper Type Check for Wallet Adapter vs Keypair
         if ('secretKey' in this.wallet) {
-            // It's a Keypair
             return await sendAndConfirmTransaction(this.connection, tx, [this.wallet]);
         } else if (typeof this.wallet.signTransaction === 'function') {
-            // Wallet Adapter
             const signedTx = await this.wallet.signTransaction(tx);
             return await this.connection.sendRawTransaction(signedTx.serialize());
         } else {
-            throw new Error("Wallet not supported: must be Keypair or Wallet Adapter");
+            throw new Error("Wallet not supported");
         }
     }
 }
+
+// Config
+const RPC_URL = "https://api.devnet.solana.com";
+const AUTHORITY_KEY_PATH = path.resolve(__dirname, "../../../keys/authority.json");
+
+async function main() {
+    console.log("🚀 Starting standalone demo...");
+
+    // Load Wallet
+    const secret = JSON.parse(fs.readFileSync(AUTHORITY_KEY_PATH, 'utf-8'));
+    const wallet = Keypair.fromSecretKey(new Uint8Array(secret));
+
+    console.log(`🔑 Wallet: ${wallet.publicKey.toBase58()}`);
+
+    const connection = new Connection(RPC_URL, "confirmed");
+    const agent = new LogosAgent({ connection, wallet });
+
+    // Register
+    try {
+        console.log("📝 Registering Agent...");
+        const tx = await agent.registerAgent("DemoAgent_" + Date.now().toString().slice(-4));
+        console.log(`✅ Registered! TX: ${tx}`);
+    } catch (e: any) {
+        console.log(`⚠️ Register failed: ${e.message}`);
+    }
+
+    // Log
+    console.log("🚀 Logging Demo Decisions...");
+    try {
+        const tx1 = await agent.logDecision({
+            objectiveId: "SAFE_" + Date.now(),
+            observations: [],
+            actionPlan: { action: "swap" }
+        });
+        console.log(`✅ Safe Trade Logged: ${tx1}`);
+
+        const tx2 = await agent.logDecision({
+            objectiveId: "RUG_" + Date.now(),
+            observations: [],
+            actionPlan: { action: "blocked_transfer" }
+        });
+        console.log(`✅ Rug Pull Logged: ${tx2}`);
+    } catch (e: any) {
+        console.error(`❌ Logging failed: ${e.message}`);
+    }
+}
+
+main().catch(console.error);

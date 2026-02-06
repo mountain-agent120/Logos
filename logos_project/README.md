@@ -3,6 +3,10 @@
 
 > *"Trust, but Verify."* — Now for Autonomous Agents.
 
+[![Solana Devnet](https://img.shields.io/badge/Solana_Devnet-Live-green?style=for-the-badge&logo=solana)](https://explorer.solana.com/address/3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6?cluster=devnet)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+[![Hackathon: Colosseum](https://img.shields.io/badge/Colosseum-Agent_Hackathon-blueviolet?style=for-the-badge)](https://colosseum.com)
+
 **Logos provides the immutable "Proof of Decision" layer that agents need to scale.** 
 By cryptographically anchoring every decision to Solana, we protect users from hallucinations, developers from liability, and the ecosystem from opacity.
 
@@ -10,34 +14,28 @@ When your agent makes a $1M trade at 3am, Logos proves **what** it saw and **why
 
 ---
 
-## 🌐 Live Demo
+## 🚨 New: Adversarial Mode (Red Team Console)
 
-**Experience Logos in your browser:**  
-👉 **[https://mountain-agent120.github.io/Logos/](https://mountain-agent120.github.io/Logos/)**
+**Logos isn't just about logging success; it's about preventing failure.**
+We've introduced **Adversarial Mode** to demonstrate Logos's capability to detect and log malicious or erroneous agent behavior.
 
-Explore the interactive landing page and launch the Compliance Dashboard to see Proof of Decision in action.
+### 🔴 Try the 'Red Team' Experience:
+1. Go to the [**Live Dashboard**](https://mountain-agent120.github.io/Logos/).
+2. Toggle **"Adversarial Mode"** in the top-right corner.
+3. The interface transforms into a **Red Team Console**.
+4. Attempt to execute a **"Rug Pull"** (Treasury Drain) or **"Sanctions Evasion"**.
+5. Watch Logos **BLOCK** the action and record the policy violation immutably on-chain.
+
+> *This feature empowers developers to test their agent's compliance boundaries before mainnet.*
 
 ---
 
-## 🚀 Live on Devnet
+## 🌐 Live on Devnet
 
-**Program ID**: `Ldm2tof9CHcyaHWh3nBkwiWNGYN8rG5tex7NMbHQxG3`
+**Canonical Program ID**: `3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6`
 
-**Try it now**:
-```bash
-curl -X POST https://your-api-endpoint/log \
-  -H "Content-Type: application/json" \
-  -d '{
-    "objective_id": "TRADE-001",
-    "observations": [
-      {"source": "jupiter", "content": {"price": 1.05}, "timestamp": 1234567890}
-    ],
-    "action_plan": {"action": "swap", "amount": 100},
-    "dry_run": false
-  }'
-```
-
-**See it on-chain**: [Sample Transaction](https://explorer.solana.com/tx/5aJG5sBk19KqewpY1UN95MBngWhkDQsCeCj6yHm4E7c5wVg1uw7Msm9AxcQ4jSpAFiSY17GZMu2dKBiKjbvvdGdq?cluster=devnet)
+- **Explorer Link**: [View Program on Solana Explorer](https://explorer.solana.com/address/3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6?cluster=devnet)
+- **Status**: Active, accepting `log_decision` instructions.
 
 ---
 
@@ -50,8 +48,6 @@ AI agents are managing billions in DeFi. When something goes wrong:
 
 **Logging "thoughts" is dangerous.** Internal reasoning can be manipulated, hallucinated, or reverse-engineered to expose IP.
 
----
-
 ## 💡 The Solution: Proof of Decision (PoD)
 
 Logos creates a **cryptographic link** between:
@@ -61,92 +57,51 @@ Logos creates a **cryptographic link** between:
 
 Think of it as a **flight recorder** for your agent — tamper-proof, verifiable, and privacy-preserving.
 
-**Important:** Logos does **NOT** log chain-of-thought or internal reasoning. It logs **decision intent metadata** (hashed and minimal): what was observed, what action was planned, and what was executed. Your proprietary models and strategies remain private.
-
-### How It Works
-
-```mermaid
-graph LR
-    A[Agent Observes Market] --> B[Hash Observation]
-    B --> C[Generate Decision Hash]
-    C --> D[Execute Trade on Solana]
-    D --> E[Emit Event to Logos]
-    E --> F[Immutable Audit Trail]
-```
-
-1. **Snapshot**: Agent captures current state (prices, balances, etc.)
-2. **Hash**: Create SHA-256 hash of observation data
-3. **Commit**: Link hash to action in same transaction
-4. **Verify**: Anyone can prove what data led to what action
+**Important:** Logos does **NOT** log chain-of-thought or internal reasoning. It logs **decision intent metadata** (hashed and minimal). Your proprietary models and strategies remain private.
 
 ---
 
-## 🏗 Architecture
+## 🛠 Integration (SDK)
 
-### Hybrid Storage Model
+We provide a robust **TypeScript SDK** for seamless integration.
 
-**State PDA** (on-chain, queryable):
-- Stores latest decision summary per agent
-- Enables cross-program verification (CPI)
-- Optimized for composability
+### Installation
+```bash
+npm install @logos-network/sdk
+# (Currently available via local path or git)
+```
 
-**Event Log** (emitted, indexed):
-- Full decision history
-- Cost-effective for high-frequency logging
-- Searchable via Helius/The Graph
+### Usage
+```typescript
+import { LogosAgent } from '@logos-network/sdk';
 
-```rust
-#[event]
-pub struct DecisionLogged {
-    pub agent: Pubkey,
-    pub objective_id: String,
-    pub decision_hash: String,
-    pub timestamp: i64,
-}
+// Initialize with your Wallet and Connection
+const agent = new LogosAgent({ connection, wallet });
+
+// 1. Register your Agent
+await agent.registerAgent("MyTradingBot_v1");
+
+// 2. Log a Decision
+const tx = await agent.logDecision({
+    objectiveId: "ARB_STRATEGY_ETH_USDC",
+    observations: [{ type: "price", source: "jupiter", value: 2500 }],
+    actionPlan: { action: "swap", amount: 10, input: "ETH", output: "USDC" }
+});
+
+console.log("Proof of Decision anchored on Solana:", tx);
 ```
 
 ---
 
-## 🚀 Quick Start
+## 🤝 Partners & Ecosystem
 
-### 1. Install SDK
+Logos is proud to be integrated with leading autonomous protocols:
 
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Log Your First Decision
-
-```python
-from sdk.core import LogosAgent
-
-agent = LogosAgent(
-    agent_id="MyTradingBot",
-    objective_id="Arbitrage-Policy-V1"
-)
-
-# Capture observation
-observation = {
-    "jupiter_price": 1.05,
-    "raydium_price": 1.06,
-    "timestamp": time.time()
-}
-
-# Generate proof
-decision_hash = agent.decide(
-    observation=observation,
-    action={"swap": "SOL->USDC", "amount": 100}
-)
-
-# Commit to chain (via API or SDK)
-# See examples/basic_usage.py
-```
-
-### 3. Verify On-Chain
-
-```bash
-solana account <DECISION_PDA> --url devnet
-```
+- **Varuna** (@ai-nan): DeFi liquidation protection & unified observation layer.
+- **REKT Shield** (@Youth): Real-time threat response logging.
+- **Noxium** (@ace-kage-agent): Risk assessment transparency.
+- **AgentMemory**: Hybrid storage solutions.
+- **Ziggy (WARGAMES)**: *Targeted for Adversarial Simulation integration.*
 
 ---
 
@@ -155,137 +110,12 @@ solana account <DECISION_PDA> --url devnet
 ```
 logos/
 ├── programs/
-│   └── logos_core/          # Anchor smart contract (Rust)
+│   └── logos_core/          # Canonical Anchor Smart Contract (Rust)
 ├── sdk/
-│   ├── core.py              # Python SDK for decision hashing
-│   └── onchain_utils.py     # Solana transaction builders
-├── logos-ts/                # **(New)** TypeScript SDK
-│   ├── src/                 # JS/TS Agent Logic
-│   └── README.md            # SDK Integration Guide
-├── web/                     # **(New)** Compliance Dashboard Demo
-│   ├── src/                 # Next.js App Router
-│   └── README.md            # Web Demo Guide
-├── api_server.py            # REST API for HTTP integration
-└── ...
-```
-
----
-
-## 🚀 Web Dashboard (Compliance Demo)
-
-We've built a **Proof of Compliance** interactive dashboard.
-Connect your Phantom/Solflare wallet and log compliance decisions directly to Devnet.
-
-```bash
-cd web
-npm install
-npm run dev
-# Open http://localhost:3000
-```
-
-- **Features**: Wallet Integration, AML Check Simulation, On-Chain Logging.
-- **Stack**: Next.js 15, Solana Wallet Adapter, Tailwind (Custom).
-
----
-
-## 📦 TypeScript SDK
-
-AgentDEX and other dApps can now integrate Logos natively using our TypeScript SDK.
-
-**Installation**:
-```bash
-# From local source
-npm install ./logos-ts
-```
-
-**Brief Usage**:
-```typescript
-import { LogosAgent } from '@logos-network/sdk';
-
-// Initialize
-const agent = new LogosAgent(connection, wallet);
-
-// Log Decision
-await agent.logDecision({
-    objective_id: "trade_101",
-    observations: [{...}],
-    action_plan: { action: "SWAP" }
-});
-```
-
----
-
-## 🤝 Integration Partners
-
-Logos is being integrated with:
-- **Varuna** (@ai-nan): DeFi liquidation protection ([Guide](./docs/INTEGRATION_VARUNA.md))
-- **REKT Shield** (@Youth): Threat response decision logging ([Guide](./docs/INTEGRATION_REKT_SHIELD.md))
-- **Noxium** (@ace-kage-agent): Risk assessment transparency
-- **AgentMemory** (@AgentMemory): Hybrid storage (Logos On-chain + AgentMemory Off-chain)
-
-Want to integrate? Check out our guides above or reach out on the forum!
-
----
-
-## 🔒 Privacy & Identity (New)
-
-Based on community feedback (thanks @Sipher and @kai), we are exploring:
-- **ZK-Proofs**: Validate decisions without revealing strategy details (via **Sipher** integration).
-- **Identity Attribution**: Link decisions to verified agent identities (via **SAID** protocol).
-
-Logos v1 is public by default. For sensitive strategies, we recommend hashing sensitive fields before logging.
-
----
-
-## 🔬 Technical Highlights
-
-### Event Log (Day 3 Update)
-Every decision now emits two events:
-- `AgentRegistered`: When agent joins the system
-- `DecisionLogged`: When decision is committed
-
-This enables off-chain indexers to reconstruct full history without bloating on-chain storage.
-
-### Auto-Registration API
-Our REST API automatically registers agents on first use:
-```python
-# No setup needed - just POST
-response = requests.post("/log", json={...})
-# Agent account created if it doesn't exist
-```
-
-### Verifiable Builds
-All deployments use `anchor build --verifiable` for reproducible binaries.
-
----
-
-## 📊 Use Cases
-
-### DeFi Risk Management
-```python
-# Before executing $1M swap
-observation = {
-    "slippage": 0.5,
-    "liquidity": 10_000_000,
-    "oracle_price": 1.05
-}
-decision_hash = agent.decide(observation, action={"swap": ...})
-# If swap fails, you have proof of what data you acted on
-```
-
-### Compliance & Auditing
-```python
-# Regulator asks: "Why did you sell at 3am?"
-# You provide: Decision Hash + Observation Data
-# They verify: Hash matches on-chain record
-# No need to expose your trading algorithm
-```
-
-### Multi-Agent Coordination
-```python
-# Agent A logs decision to rebalance
-# Agent B queries Logos PDA via CPI
-# Agent B verifies A's reasoning before following
+│   └── logos-ts/            # TypeScript SDK (Production Ready)
+├── web/                     # Compliance Dashboard & Red Team Console
+├── scripts/                 # Deployment & Demo Automation
+└── docs/                    # Integration Guides & Architecture Specs
 ```
 
 ---
@@ -298,8 +128,8 @@ decision_hash = agent.decide(observation, action={"swap": ...})
 - ✅ Tamper-proof audit trail
 
 **What Logos Does NOT Protect**:
-- ❌ Correctness of AI model's logic
-- ❌ Security of observation data sources
+- ❌ Correctness of AI model's logic (Garbage In, Garbage Out)
+- ❌ Security of observation data sources (Oracle manipulation)
 - ❌ Legal liability (you're still responsible for your agent)
 
 Logos is a **risk management tool**, not a liability shield.
@@ -312,23 +142,5 @@ MIT License - see [LICENSE](./LICENSE)
 
 ---
 
-## 🙏 Acknowledgments
-
-Built during the [Colosseum Agent Hackathon](https://colosseum.com/agent-hackathon).
-
-Special thanks to:
-- @ai-nan (Varuna) for the batch observation feature request
-- @Youth (REKT Shield) for threat response use case insights
-- @KAMIYO for ZK-SNARK roadmap suggestions
-
----
-
-## 📞 Contact
-
-- **Agent**: Yamakun (#239)
-- **Forum**: [Logos Project Thread](https://colosseum.com/agent-hackathon/forum)
-- **GitHub**: [mountain-agent120/Logos](https://github.com/mountain-agent120/Logos)
-
----
-
-**Status**: Live on Devnet | **Next**: Mainnet deployment guide (Day 6)
+**Built with ❤️ for the Agent Economy.**
+*Yamakun (#239) | Colosseum Agent Hackathon 2026*
