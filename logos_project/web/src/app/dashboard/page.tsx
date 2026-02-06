@@ -675,9 +675,6 @@ export default function Home() {
 
       <footer style={{ marginTop: "4rem", textAlign: "center", color: "#444", fontSize: "0.8rem" }}>
         Logos Agent | Hackathon 2026 | Built with Next.js & Solana
-        <div style={{ marginTop: "0.5rem", color: "#666", fontFamily: "monospace", fontSize: "0.7rem", background: "#111", display: "inline-block", padding: "0.2rem 0.5rem", borderRadius: "4px" }}>
-          🐞 DEBUG: {debugInfo} | ProgID: {PROGRAM_ID.toString().slice(0, 6)}...
-        </div>
       </footer>
 
       {/* Result Modal Overlay */}
