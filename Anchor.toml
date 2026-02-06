@@ -1,0 +1,18 @@
+[toolchain]
+anchor_version = "0.32.1"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+logos_core = "Ldm2tof9CHcyaHWh3nBkwiWNGYN8rG5tex7NMbHQxG3"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "localnet"
+wallet = "./id.json"
+
+[hooks]
