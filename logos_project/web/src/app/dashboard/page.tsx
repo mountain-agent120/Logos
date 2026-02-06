@@ -92,7 +92,68 @@ export default function Home() {
     setLoading(true);
 
     try {
-      // 1. Create Decision Data
+      // Balance Check
+      const balance = await connection.getBalance(publicKey);
+      if (balance < 0.002 * 1e9) {
+        alert("Insufficient SOL. You need at least 0.002 SOL on Devnet to register and log.\nPlease use a faucet.");
+        setLoading(false);
+        return;
+      }
+
+      // 0. Constants & Encoders
+      const getIdlDiscriminator = (name: string) => {
+        // Correct discriminators for Logos Core
+        // global:register_agent -> [135, 157, 66, 195, 2, 113, 175, 30]
+        if (name === "register_agent") return new Uint8Array([135, 157, 66, 195, 2, 113, 175, 30]);
+        // global:log_decision -> [160, 73, 104, 176, 37, 115, 231, 204]
+        if (name === "log_decision") return new Uint8Array([160, 73, 104, 176, 37, 115, 231, 204]);
+        return new Uint8Array([]);
+      };
+
+      const encoder = new TextEncoder();
+
+      // PDA: Agent Account
+      // seeds = [b"agent", authority.key().as_ref()]
+      const [agentPda] = PublicKey.findProgramAddressSync(
+        [encoder.encode("agent"), publicKey.toBuffer()],
+        PROGRAM_ID
+      );
+
+      // 1. Check if Agent Account Exists
+      const agentAccountInfo = await connection.getAccountInfo(agentPda);
+      const isRegistered = agentAccountInfo !== null;
+
+      const transaction = new Transaction();
+
+      // 2. Register Agent Instruction (if not registered)
+      if (!isRegistered) {
+        console.log("Agent not registered. Adding register instruction...");
+        const agentId = "SimulatedAgent-" + Date.now().toString().slice(-4);
+        const discriminator = getIdlDiscriminator("register_agent");
+
+        // Serialize: [Discriminator] + [String Length (u32)] + [String Bytes]
+        const idBytes = encoder.encode(agentId);
+
+        // Manual Buffer construction compatible with browser/Buffer import
+        const data = Buffer.alloc(8 + 4 + idBytes.length);
+        data.set(discriminator, 0);
+        data.writeUInt32LE(idBytes.length, 8);
+        data.set(idBytes, 12);
+
+        const registerIx = new TransactionInstruction({
+          programId: PROGRAM_ID,
+          keys: [
+            { pubkey: agentPda, isSigner: false, isWritable: true },
+            { pubkey: publicKey, isSigner: true, isWritable: true },
+            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+          ],
+          data: data
+        });
+
+        transaction.add(registerIx);
+      }
+
+      // 3. Create Decision Data
       const decision = {
         agent: "YamakunAgent",
         action: amount > 100 ? "BLOCK" : "APPROVE",
@@ -101,34 +162,62 @@ export default function Home() {
         timestamp: new Date().toISOString()
       };
 
-      // 2. Compute Hash
+      // 4. Compute Proof of Decision (PoD)
       const decisionHash = await computeHash(decision);
+      const objectiveId = `DEMO-OBJ-${Date.now()}`;
 
-      // 3. Create Memo Instruction
-      // Format: "LOGOS:v1:<HASH>:<JSON_DATA>"
-      const memoContent = `LOGOS:v1:${decisionHash}:${JSON.stringify(decision)}`;
+      // PDA: Decision Record
+      // seeds = [b"decision", agent_account.key().as_ref(), objective_id.as_bytes()]
+      const [decisionPda] = PublicKey.findProgramAddressSync(
+        [encoder.encode("decision"), agentPda.toBuffer(), encoder.encode(objectiveId)],
+        PROGRAM_ID
+      );
 
-      const memoInstruction = new TransactionInstruction({
-        keys: [{ pubkey: publicKey, isSigner: true, isWritable: true }],
-        programId: new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcQb"),
-        data: Buffer.from(new TextEncoder().encode(memoContent)),
+      // 5. Log Decision Instruction
+      console.log("Adding log_decision instruction...");
+      const discLog = getIdlDiscriminator("log_decision");
+      const hashBytes = encoder.encode(decisionHash);
+      const objBytes = encoder.encode(objectiveId);
+
+      // Layout: [Disc(8)] + [HashStr(4+len)] + [ObjStr(4+len)]
+      const logData = Buffer.alloc(8 + 4 + hashBytes.length + 4 + objBytes.length);
+      let offset = 0;
+
+      logData.set(discLog, offset); offset += 8;
+
+      logData.writeUInt32LE(hashBytes.length, offset); offset += 4;
+      logData.set(hashBytes, offset); offset += hashBytes.length;
+
+      logData.writeUInt32LE(objBytes.length, offset); offset += 4;
+      logData.set(objBytes, offset); offset += objBytes.length;
+
+      const logIx = new TransactionInstruction({
+        programId: PROGRAM_ID,
+        keys: [
+          { pubkey: decisionPda, isSigner: false, isWritable: true },
+          { pubkey: agentPda, isSigner: false, isWritable: true }, // Verified: this account must be initialized by register_agent
+          { pubkey: publicKey, isSigner: true, isWritable: true }, // Authority
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        ],
+        data: logData
       });
 
-      const tx = new Transaction().add(memoInstruction);
+      transaction.add(logIx);
 
-      // 4. Send Transaction
-      const sig = await sendTransaction(tx, connection);
+      // 6. Send Transaction
+      // Note: We don't skip preflight here to get real errors if it fails
+      const sig = await sendTransaction(transaction, connection, { skipPreflight: false });
       console.log("Tx Signature:", sig);
 
-      // 5. Optimistic UI Update
+      // 7. Optimistic UI Update
       setLogs(prev => [{
         sig,
         hash: decisionHash,
         status: decision.action === "APPROVE" ? "APPROVED" : "BLOCKED",
-        timestamp: "Just Now",
+        timestamp: "Processing...",
         action: `Action: ${decision.action} -> ${recipient}`,
-        agent: "You (Simulator)",
-        objective: "Demo-Policy"
+        agent: isRegistered ? "Registered Agent" : "New Agent (Auto-Registered)",
+        objective: objectiveId
       }, ...prev]);
 
     } catch (err: any) {
