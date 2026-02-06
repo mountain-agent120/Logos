@@ -1,0 +1,10 @@
+[profile.release]
+overflow-checks = true
+
+# Cargo.toml（ルート）
+[workspace]
+members = [
+  "programs/*"
+]
+resolver = "2"
+
