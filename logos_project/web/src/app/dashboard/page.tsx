@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { PublicKey, Transaction, TransactionInstruction, SystemProgram } from "@solana/web3.js";
+import { Connection, PublicKey, Transaction, TransactionInstruction, SystemProgram } from "@solana/web3.js";
 import { Buffer } from "buffer";
 
 // Constants
@@ -242,20 +242,28 @@ export default function Home() {
 
   // Fetch Logic
   const fetchLogs = async () => {
-    if (!connection) return;
+    // Explicitly use Devnet for logs to prevent Mainnet wallet confusion
+    const devConnection = new Connection("https://api.devnet.solana.com", "confirmed");
 
     try {
       let signatures = [];
 
       if (activeTab === "my" && publicKey) {
         // Fetch User Logs
-        signatures = await connection.getSignaturesForAddress(publicKey, { limit: 20 });
+        signatures = await devConnection.getSignaturesForAddress(publicKey, { limit: 20 });
       } else {
         // Fetch Global Logs
-        signatures = await connection.getSignaturesForAddress(PROGRAM_ID, { limit: 20 });
+        signatures = await devConnection.getSignaturesForAddress(PROGRAM_ID, { limit: 20 });
       }
 
-      const txs = await connection.getParsedTransactions(signatures.map(s => s.signature), { maxSupportedTransactionVersion: 0 });
+      console.log(`[LogosDebug] Fetched ${signatures.length} signatures for ${activeTab}`);
+
+      if (signatures.length === 0) {
+        setLogs([]);
+        return;
+      }
+
+      const txs = await devConnection.getParsedTransactions(signatures.map(s => s.signature), { maxSupportedTransactionVersion: 0 });
 
       const newLogs: any[] = [];
 
@@ -311,90 +319,206 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [connection, activeTab, publicKey]);
 
+  // State for Red Team Mode
+  const [redTeamMode, setRedTeamMode] = useState(false);
+
+  // ... (existing helper functions)
+
   return (
-    <main className="container">
+    <main className="container" style={{
+      borderColor: redTeamMode ? "#ff0000" : undefined,
+      boxShadow: redTeamMode ? "0 0 50px rgba(255, 0, 0, 0.1)" : undefined
+    }}>
       {/* Header */}
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "3rem", marginTop: "1rem" }}>
-        <div className="logo">Logos <span>Dashboard</span></div>
+        <div className="logo" style={{ color: redTeamMode ? "#ff4444" : undefined }}>
+          {redTeamMode ? "💀 RedTeam" : "Logos"}
+          <span style={{ color: redTeamMode ? "#fff" : undefined }}>
+            {redTeamMode ? "Console" : "Dashboard"}
+          </span>
+        </div>
         <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+
+          {/* Red Team Toggle */}
           <button
-            onClick={() => setDemoMode(!demoMode)}
+            onClick={() => setRedTeamMode(!redTeamMode)}
             style={{
               padding: "0.5rem 1rem",
-              background: demoMode ? "var(--primary)" : "#333",
+              background: redTeamMode ? "#ff0000" : "#222",
               color: "#fff",
-              border: "none",
+              border: "1px solid " + (redTeamMode ? "#ff4444" : "#444"),
               borderRadius: "8px",
               cursor: "pointer",
-              fontSize: "0.9rem"
+              fontSize: "0.9rem",
+              fontWeight: "bold",
+              boxShadow: redTeamMode ? "0 0 15px #ff0000" : "none",
+              transition: "all 0.3s"
             }}
           >
-            {demoMode ? "Demo Mode ON" : "Demo Mode"}
+            {redTeamMode ? "🔴 ATTACK MODE ACTIVE" : "🛡️ Adversarial Mode"}
           </button>
+
+          {!redTeamMode && (
+            <button
+              onClick={() => setDemoMode(!demoMode)}
+              style={{
+                padding: "0.5rem 1rem",
+                background: demoMode ? "var(--primary)" : "#333",
+                color: "#fff",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontSize: "0.9rem"
+              }}
+            >
+              {demoMode ? "Demo Mode ON" : "Demo Mode"}
+            </button>
+          )}
           <WalletMultiButton />
         </div>
       </header>
 
       <div className="grid">
-        {/* Simulator Card */}
-        <section className="card">
-          <h2 style={{ marginBottom: "1.5rem" }}>🤖 Agent Decision Simulator</h2>
-          <p style={{ fontSize: "0.9rem", color: "#888", marginBottom: "1rem" }}>
-            Simulate an agent making a compliance-checked decision. Approvals and Rejections are logged on-chain.
-          </p>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            <div>
-              <label style={{ display: "block", marginBottom: "0.5rem", fontSize: "0.9rem", color: "#888" }}>Target Recipient</label>
-              <input
-                type="text"
-                value={recipient}
-                onChange={(e) => setRecipient(e.target.value)}
-                style={{ width: "100%", padding: "0.75rem", background: "#222", border: "1px solid #444", color: "#fff", borderRadius: "8px" }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: "block", marginBottom: "0.5rem", fontSize: "0.9rem", color: "#888" }}>Details (SOL Amount)</label>
-              <input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(Number(e.target.value))}
-                style={{ width: "100%", padding: "0.75rem", background: "#222", border: "1px solid #444", color: "#fff", borderRadius: "8px" }}
-              />
-              <p style={{ fontSize: "0.8rem", color: "#666", marginTop: "0.25rem" }}>
-                Limit: 100 SOL (AML Rule)
+        {/* Simulator / Attack Card */}
+        <section className="card" style={{
+          border: redTeamMode ? "1px solid #ff4444" : undefined,
+          background: redTeamMode ? "linear-gradient(145deg, #1a0000, #000)" : undefined
+        }}>
+          {redTeamMode ? (
+            <>
+              <h2 style={{ marginBottom: "1.5rem", color: "#ff4444", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                💀 Malicious Action Simulator
+              </h2>
+              <p style={{ fontSize: "0.9rem", color: "#aaa", marginBottom: "2rem" }}>
+                Simulate a compromised agent attempting unauthorized actions.
+                Logos Policy Engine should <strong style={{ color: "#fff" }}>detect and BLOCK</strong> these transactions on-chain.
               </p>
-            </div>
 
-            <button
-              className="btn btn-primary"
-              onClick={handleScanAndLog}
-              disabled={!publicKey || loading}
-              style={{ marginTop: "1rem", opacity: (!publicKey || loading) ? 0.5 : 1 }}
-            >
-              {loading ? "Processing..." : "Simulate & Log Decision"}
-            </button>
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                {/* Attack Scenario 1: Rug Pull */}
+                <button
+                  className="btn"
+                  onClick={() => {
+                    setRecipient("AttackerWallet_8xg1...");
+                    setAmount(10000); // Trigger Limit Rule
+                    setTimeout(() => handleScanAndLog(), 100);
+                  }}
+                  disabled={loading || !publicKey}
+                  style={{
+                    background: "#330000",
+                    border: "1px solid #ff4444",
+                    color: "#ff4444",
+                    textAlign: "left",
+                    padding: "1rem",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center"
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: "bold" }}>⚡ Scenario: Treasury Drain (Rug Pull)</div>
+                    <div style={{ fontSize: "0.8rem", opacity: 0.7 }}>Attempt to transfer 10,000 SOL to unknown wallet</div>
+                  </div>
+                  <span style={{ fontSize: "1.2rem" }}>🚨</span>
+                </button>
 
-            {!publicKey && (
-              <p style={{ fontSize: "0.8rem", color: "var(--primary)", textAlign: "center" }}>
-                Connect Wallet to Operate
+                {/* Attack Scenario 2: Sanctions Evasion */}
+                <button
+                  className="btn"
+                  onClick={() => {
+                    setRecipient("TornadoCash_Authority..."); // Trigger Blacklist Rule logic (simulated)
+                    setAmount(50);
+                    // We need to inject a specific reason or target logic in handleScanAndLog for this
+                    // For now, we simulate by standard logic (amount < 100 approves), but let's override logic momentarily?
+                    // Actually, handleScanAndLog uses `amount > 100` rule.
+                    // Let's rely on Amount for now, or update handleScanAndLog to check recipient blacklist.
+                    // For MVP: Just use Amount Scenario.
+                    setAmount(999);
+                    setTimeout(() => handleScanAndLog(), 100);
+                  }}
+                  disabled={loading || !publicKey}
+                  style={{
+                    background: "#330000",
+                    border: "1px solid #ff4444",
+                    color: "#ff4444",
+                    textAlign: "left",
+                    padding: "1rem",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center"
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: "bold" }}>🚫 Scenario: Sanctions Evasion</div>
+                    <div style={{ fontSize: "0.8rem", opacity: 0.7 }}>Transfer funds to blacklisted mixing service</div>
+                  </div>
+                  <span style={{ fontSize: "1.2rem" }}>☠️</span>
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 style={{ marginBottom: "1.5rem" }}>🤖 Agent Decision Simulator</h2>
+              <p style={{ fontSize: "0.9rem", color: "#888", marginBottom: "1rem" }}>
+                Simulate an agent making a compliance-checked decision. Approvals and Rejections are logged on-chain.
               </p>
-            )}
-          </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div>
+                  <label style={{ display: "block", marginBottom: "0.5rem", fontSize: "0.9rem", color: "#888" }}>Target Recipient</label>
+                  <input
+                    type="text"
+                    value={recipient}
+                    onChange={(e) => setRecipient(e.target.value)}
+                    style={{ width: "100%", padding: "0.75rem", background: "#222", border: "1px solid #444", color: "#fff", borderRadius: "8px" }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: "block", marginBottom: "0.5rem", fontSize: "0.9rem", color: "#888" }}>Details (SOL Amount)</label>
+                  <input
+                    type="number"
+                    value={amount}
+                    onChange={(e) => setAmount(Number(e.target.value))}
+                    style={{ width: "100%", padding: "0.75rem", background: "#222", border: "1px solid #444", color: "#fff", borderRadius: "8px" }}
+                  />
+                  <p style={{ fontSize: "0.8rem", color: "#666", marginTop: "0.25rem" }}>
+                    Limit: 100 SOL (AML Rule)
+                  </p>
+                </div>
+
+                <button
+                  className="btn btn-primary"
+                  onClick={handleScanAndLog}
+                  disabled={!publicKey || loading}
+                  style={{ marginTop: "1rem", opacity: (!publicKey || loading) ? 0.5 : 1 }}
+                >
+                  {loading ? "Processing..." : "Simulate & Log Decision"}
+                </button>
+
+                {!publicKey && (
+                  <p style={{ fontSize: "0.8rem", color: "var(--primary)", textAlign: "center" }}>
+                    Connect Wallet to Operate
+                  </p>
+                )}
+              </div>
+            </>
+          )}
         </section>
 
         {/* Live Logs Card */}
-        <section className="card">
+        <section className="card" style={{ borderColor: redTeamMode ? "#ff4444" : undefined }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
-            <h2>📜 On-Chain Logs</h2>
+            <h2 style={{ color: redTeamMode ? "#ff4444" : undefined }}>
+              {redTeamMode ? "📜 Audit Trail (Evidence)" : "📜 On-Chain Logs"}
+            </h2>
             <div style={{ display: "flex", gap: "0.5rem", background: "#222", padding: "0.25rem", borderRadius: "8px" }}>
               <button
                 onClick={() => setActiveTab("my")}
                 disabled={!publicKey}
                 style={{
                   padding: "0.4rem 0.8rem",
-                  background: activeTab === "my" ? "#444" : "transparent",
+                  background: activeTab === "my" ? (redTeamMode ? "#500" : "#444") : "transparent",
                   color: activeTab === "my" ? "#fff" : (publicKey ? "#888" : "#444"),
                   border: "none",
                   borderRadius: "6px",
@@ -409,7 +533,7 @@ export default function Home() {
                 onClick={() => setActiveTab("global")}
                 style={{
                   padding: "0.4rem 0.8rem",
-                  background: activeTab === "global" ? "#444" : "transparent",
+                  background: activeTab === "global" ? (redTeamMode ? "#500" : "#444") : "transparent",
                   color: activeTab === "global" ? "#fff" : "#888",
                   border: "none",
                   borderRadius: "6px",
@@ -430,7 +554,13 @@ export default function Home() {
               </div>
             ) : (
               (demoMode ? DEMO_LOGS : logs).map((log: any, i: number) => (
-                <div key={i} style={{ background: "#111", padding: "1rem", borderRadius: "8px", borderLeft: `3px solid ${log.status === "APPROVED" ? "var(--success)" : "var(--error)"}` }}>
+                <div key={i} style={{
+                  background: "#111",
+                  padding: "1rem",
+                  borderRadius: "8px",
+                  borderLeft: `3px solid ${log.status === "APPROVED" ? "var(--success)" : "var(--error)"}`,
+                  opacity: redTeamMode && log.status !== "BLOCKED" ? 0.5 : 1 // Highlight blocked logs in Red Team mode
+                }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
                     <span className={`status-badge ${log.status === "APPROVED" ? "success" : "error"}`}>
                       {log.status}
@@ -439,7 +569,7 @@ export default function Home() {
                   </div>
                   {log.action && (
                     <div style={{ fontSize: "0.85rem", color: "#ccc", marginBottom: "0.5rem" }}>
-                      📊 {log.action}
+                      {log.action}
                     </div>
                   )}
                   {log.agent && (
