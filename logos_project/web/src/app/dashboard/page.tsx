@@ -17,6 +17,7 @@ export default function Home() {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string>("Initializing..."); // Debug state
 
   // State for Result Modal
   const [resultModal, setResultModal] = useState<{
@@ -297,6 +298,7 @@ export default function Home() {
       }
 
       console.log(`[LogosDebug] Fetched ${signatures.length} signatures for ${activeTab}`);
+      setDebugInfo(`Fetched ${signatures.length} sigs from ${devConnection.rpcEndpoint} at ${new Date().toLocaleTimeString()}`);
 
       if (signatures.length === 0) {
         setLogs([]);
@@ -348,8 +350,9 @@ export default function Home() {
         setLogs([]);
       }
 
-    } catch (e) {
+    } catch (e: any) {
       console.error("Fetch error:", e);
+      setDebugInfo(`Error: ${e.message} at ${new Date().toLocaleTimeString()}`);
     }
   };
 
@@ -639,6 +642,9 @@ export default function Home() {
 
       <footer style={{ marginTop: "4rem", textAlign: "center", color: "#444", fontSize: "0.8rem" }}>
         Logos Agent | Hackathon 2026 | Built with Next.js & Solana
+        <div style={{ marginTop: "0.5rem", color: "#666", fontFamily: "monospace", fontSize: "0.7rem", background: "#111", display: "inline-block", padding: "0.2rem 0.5rem", borderRadius: "4px" }}>
+          🐞 DEBUG: {debugInfo} | ProgID: {PROGRAM_ID.toString().slice(0, 6)}...
+        </div>
       </footer>
 
       {/* Result Modal Overlay */}
