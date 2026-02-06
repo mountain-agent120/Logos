@@ -209,16 +209,12 @@ export default function Home() {
       const sig = await sendTransaction(transaction, connection, { skipPreflight: false });
       console.log("Tx Signature:", sig);
 
-      // 7. Optimistic UI Update
-      setLogs(prev => [{
-        sig,
-        hash: decisionHash,
-        status: decision.action === "APPROVE" ? "APPROVED" : "BLOCKED",
-        timestamp: "Processing...",
-        action: `Action: ${decision.action} -> ${recipient}`,
-        agent: isRegistered ? "Registered Agent" : "New Agent (Auto-Registered)",
-        objective: objectiveId
-      }, ...prev]);
+      // 5. Optimistic UI Update
+      // We don't update local logs immediately for global feed consistency,
+      // or we can add it to a "My Recent" list.
+      // For now, let's trust the poller to pick it up or show a success message.
+      alert(`Success! Decision Logged.\nObjective: ${objectiveId}\nHash: ${decisionHash.slice(0, 16)}...`);
+      // setLogs(...) // Poller will catch it
 
     } catch (err: any) {
       console.error("Error logging decision:", err);
@@ -231,7 +227,6 @@ export default function Home() {
       }
       if (err.logs) {
         console.log("Simulation logs:", err.logs);
-        // Check for specific anchor errors if possible
       }
 
       alert(`Error: ${msg}\n\nCheck console for details.`);
@@ -240,60 +235,71 @@ export default function Home() {
     }
   };
 
-  // Effect: Fetch Logs (Poll for accounts owned by program)
-  // We revert to checking program accounts because 'getParsedTransaction' for custom programs
-  // won't show inner instruction details easily unless we define a parser.
-  // Fetching program accounts is more robust for "Show me all logs on chain".
+  // Effect: Global Activity Feed (Fetch transactions for PROGRAM_ID)
   useEffect(() => {
     if (!connection) return;
 
-    const fetchLogs = async () => {
+    const fetchGlobalLogs = async () => {
       try {
-        // Fetch DecisionRecord accounts (size check or discriminator check)
-        // DecisionRecord size: 8 + 32 + (4+64) + (4+len) + 8. Min size > 100.
-        // We'll just fetch all and filter by discriminator.
-        const accounts = await connection.getProgramAccounts(PROGRAM_ID);
+        // Fetch recent transactions for the Logos Program
+        const signatures = await connection.getSignaturesForAddress(PROGRAM_ID, { limit: 20 });
 
-        const validLogs: any[] = [];
+        const newLogs: any[] = [];
 
-        for (const acc of accounts) {
-          const data = acc.account.data as Buffer;
-          if (data.length < 8) continue;
+        // Parallel fetch for speed
+        const txs = await connection.getParsedTransactions(signatures.map(s => s.signature), { maxSupportedTransactionVersion: 0 });
 
-          // Check discriminator for DecisionRecord:
-          // No easy way to know exact discriminator without IDL gen, but expected is unique.
-          // Let's assume decoding works if schema matches.
+        txs.forEach((tx, i) => {
+          if (!tx || tx.meta?.err) return;
 
-          const decoded = decodeAccountData(data, acc.pubkey);
-          if (decoded) {
-            validLogs.push({
-              sig: "ON_CHAIN", // We don't have the sig here easily without more queries
-              hash: decoded.hash,
-              status: "VERIFIED",
-              timestamp: "Synced",
-              action: "DECISION LOGGED",
-              agent: "Logos Agent",
-              objective: decoded.objective,
-              pubkey: decoded.pubkey
+          const sig = signatures[i].signature;
+          const timestamp = signatures[i].blockTime ? new Date(signatures[i].blockTime! * 1000).toLocaleString() : "Unknown";
+
+          // Determine type of interaction
+          // We look for instructions calling our program
+          const ix = tx.transaction.message.instructions.find((ix: any) =>
+            ix.programId.toString() === PROGRAM_ID.toString()
+          ) as any;
+
+          if (ix) {
+            // Try to decode data
+            // We can't easily decode base58 data from getParsedTransactions without a library or manual Buffer decoding from base58.
+            // But we can infer "Action"
+
+            let action = "Unknown Interaction";
+            let objective = "Unknown";
+
+            // Simple heuristic based on data size or just label it
+            // If we had the data buffer, we could check discriminator.
+
+            if (ix.data) {
+              // If we can get data, great. Usually it comes as base58 string in parsed tx if not fully decoded by RPC
+              // We'll mark it as a "Logos Interaction"
+              action = "Logos Protocol Interaction";
+            }
+
+            newLogs.push({
+              sig,
+              hash: "View On-Chain", // We don't have the hash easily without full decoding
+              status: "CONFIRMED",
+              timestamp,
+              action,
+              agent: tx.transaction.message.accountKeys[0].pubkey.toString().slice(0, 8) + "...", // Signer (Payer)
+              objective
             });
           }
-        }
+        });
 
-        if (validLogs.length > 0) {
-          setLogs(prev => {
-            // De-duplicate based on pubkey
-            const existingKeys = new Set(prev.map(l => l.pubkey));
-            const newLogs = validLogs.filter(l => !existingKeys.has(l.pubkey));
-            return [...newLogs, ...prev];
-          });
+        if (newLogs.length > 0) {
+          setLogs(newLogs);
         }
       } catch (e) {
         console.error("Fetch error:", e);
       }
     };
 
-    fetchLogs();
-    const interval = setInterval(fetchLogs, 10000);
+    fetchGlobalLogs();
+    const interval = setInterval(fetchGlobalLogs, 10000);
     return () => clearInterval(interval);
   }, [connection]);
 
@@ -326,7 +332,7 @@ export default function Home() {
         <section className="card">
           <h2 style={{ marginBottom: "1.5rem" }}>🤖 Agent Decision Simulator</h2>
           <p style={{ fontSize: "0.9rem", color: "#888", marginBottom: "1rem" }}>
-            Simulate an agent making a compliance-checked decision. Approvals and Rejections are logged on-chain (Memo).
+            Simulate an agent making a compliance-checked decision. Approvals and Rejections are logged on-chain.
           </p>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
