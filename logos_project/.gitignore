@@ -57,3 +57,5 @@ test_data/
 *.test.json
 test-ledger/
 !package-lock.json
+
+!package-lock.json
