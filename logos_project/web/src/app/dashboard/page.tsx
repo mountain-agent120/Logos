@@ -311,7 +311,17 @@ export default function Home() {
         return;
       }
 
-      const txs = await devConnection.getParsedTransactions(signatures.map(s => s.signature), { maxSupportedTransactionVersion: 0 });
+      // Fetch transactions individually to avoid "Batch requests not available" on Helius Free Tier
+      const txs = await Promise.all(
+        signatures.map(async (s) => {
+          try {
+            return await devConnection.getParsedTransaction(s.signature, { maxSupportedTransactionVersion: 0 });
+          } catch (e) {
+            console.warn(`Failed to fetch tx ${s.signature}`, e);
+            return null;
+          }
+        })
+      );
 
       const newLogs: any[] = [];
 
