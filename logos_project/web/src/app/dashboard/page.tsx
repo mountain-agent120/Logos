@@ -1,6 +1,5 @@
 "use client";
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey, Transaction, TransactionInstruction, SystemProgram } from "@solana/web3.js";
@@ -58,6 +57,85 @@ export default function Home() {
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   }
+
+  // ... (previous helper functions)
+
+  // Helper: Decode On-Chain Account Data
+  const decodeAccountData = (data: Buffer, pubkey: PublicKey) => {
+    try {
+      // Skip discriminator (8 bytes)
+      let offset = 8;
+
+      // Read Hash
+      const hashLen = data.readUInt32LE(offset);
+      offset += 4;
+      const hash = data.subarray(offset, offset + hashLen).toString('utf-8');
+      offset += hashLen;
+
+      // Read Objective ID
+      const objIdLen = data.readUInt32LE(offset);
+      offset += 4;
+      const objId = data.subarray(offset, offset + objIdLen).toString('utf-8');
+
+      return {
+        hash,
+        objective: objId,
+        pubkey: pubkey.toString()
+      };
+    } catch (e) {
+      console.error("Failed to decode account:", e);
+      return null;
+    }
+  };
+
+  // Effect: Poll for On-Chain Data
+  useEffect(() => {
+    const fetchLogs = async () => {
+      // Don't poll if no connection, or if connection is just generic (though we can read devnet without wallet)
+      // "connection" is available from useConnection hook
+
+      try {
+        // Fetch all accounts owned by our program
+        // Filter out if needed. Since we don't know exact size, we fetch all.
+        // Be careful in prod with large data sets.
+        const rawAccounts = await connection.getProgramAccounts(PROGRAM_ID);
+
+        const decodedLogs = rawAccounts.map(acc => {
+          // Basic decoding attempt
+          const decoded = decodeAccountData(acc.account.data as Buffer, acc.pubkey);
+          return decoded ? {
+            sig: "ON_CHAIN_DATA",
+            hash: decoded.hash,
+            status: "VERIFIED", // On-chain means it's finalized
+            timestamp: "Synced from Chain",
+            action: "DECISION LOGGED",
+            agent: "On-Chain Agent",
+            objective: decoded.objective,
+            pubkey: decoded.pubkey
+          } : null;
+        }).filter((log): log is any => log !== null);
+
+        if (decodedLogs.length > 0) {
+          // Combine with local logs, filtering duplicates by hash if possible
+          // For this demo, we'll prefix on-chain logs
+          setLogs(prev => {
+            const existingHashes = new Set(prev.map(l => l.hash));
+            const newLogs = decodedLogs.filter(l => !existingHashes.has(l.hash));
+            return [...newLogs, ...prev];
+          });
+        }
+
+      } catch (err) {
+        console.error("Error fetching logs:", err);
+      }
+    };
+
+    // Poll every 10 seconds
+    const interval = setInterval(fetchLogs, 10000);
+    fetchLogs(); // Initial fetch
+
+    return () => clearInterval(interval);
+  }, [connection]);
 
   // Action: Scan & Log
   const handleScanAndLog = async () => {
