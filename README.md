@@ -1,13 +1,12 @@
 # Logos 🛡️
-**The Decision Accountability Layer for Autonomous Agents on Solana.**
+**The 'Black Box' Flight Recorder for the Agent Economy.**
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg) 
-![Solana](https://img.shields.io/badge/solana-devnet-green) 
-![Status](https://img.shields.io/badge/status-live_on_devnet-brightgreen)
-![Anchor](https://img.shields.io/badge/anchor-0.32.1-purple)
+> *"Trust, but Verify."* — Now for Autonomous Agents.
 
-> **"When your agent makes a $10M trade at 3am, can you prove it wasn't hallucinating?"**  
-> Logos creates an immutable audit trail of every decision your agent makes — without exposing your prompts or model weights.
+**Logos provides the immutable "Proof of Decision" layer that agents need to scale.** 
+By cryptographically anchoring every decision to Solana, we protect users from hallucinations, developers from liability, and the ecosystem from opacity.
+
+When your agent makes a $1M trade at 3am, Logos proves **what** it saw and **why** it acted.
 
 ---
 
