@@ -1,0 +1,58 @@
+# Solana Keypairs (CRITICAL: Never commit private keys!)
+*.json
+!package.json
+!tsconfig.json
+target/deploy/*.json
+id.json
+
+# Build artifacts
+target/
+.anchor/
+node_modules/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Environment variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary files
+*.tmp
+*.temp
+
+# Forum/Planning drafts (internal use only)
+FORUM_DRAFT.md
+DAY*_UPDATE.md
+DAY*_PLAN.md
+*_PLAN.md
+API.md
+
+# Test data
+test_data/
+*.test.json
+test-ledger/
