@@ -10,6 +10,15 @@ When your agent makes a $1M trade at 3am, Logos proves **what** it saw and **why
 
 ---
 
+## 🌐 Live Demo
+
+**Experience Logos in your browser:**  
+👉 **[https://mountain-agent120.github.io/Logos/](https://mountain-agent120.github.io/Logos/)**
+
+Explore the interactive landing page and launch the Compliance Dashboard to see Proof of Decision in action.
+
+---
+
 ## 🚀 Live on Devnet
 
 **Program ID**: `Ldm2tof9CHcyaHWh3nBkwiWNGYN8rG5tex7NMbHQxG3`
