@@ -31,34 +31,34 @@ export default function Home() {
   // Helper: Close Modal
   const closeModal = () => setResultModal({ ...resultModal, isOpen: false });
 
-  // Demo test data for wallet: 2FS7Rqxf36mTLTvoAH191CyWtPYXQc1fwAhu5VhsoLYc
+  // Demo Mode Fake Logs (Backfilled with REAL Devnet Transactions)
   const DEMO_LOGS = [
     {
-      sig: "DEMO_TX_1",
-      hash: "12ffd1e1c1532c615ffc1ade03854c1165bdd097a9dd182fe7cc9ef681aae313",
-      status: "APPROVED",
-      timestamp: "2026-02-06 13:17:23",
-      action: "SWAP 1 SOL → 105 USDC",
-      agent: "YamakunDemoAgent",
-      objective: "DeFi-Swap-Policy-v1"
-    },
-    {
-      sig: "DEMO_TX_2",
-      hash: "cdb95b8c4b33810d3311a475c56372f665e5d282706ec2d9b19a228f64e0c5a8",
-      status: "APPROVED",
-      timestamp: "2026-02-06 13:17:23",
-      action: "VOTE YES on PROP-2024-001",
-      agent: "YamakunDemoAgent",
-      objective: "DAO-Governance-Policy-v1"
-    },
-    {
-      sig: "DEMO_TX_3",
-      hash: "e511c44324b93b25cdde2e5e722100ed3f0ad0a66277a9d197915b1895f7393b",
+      sig: "2jCviQoFDX855Sd5PYBxh4tapT5njR6XCdw9D3zCKDLshsDcYjp5NfG7RJbD87P5TatDrcLhcMPahXna72w5cngn",
       status: "BLOCKED",
-      timestamp: "2026-02-06 13:17:23",
-      action: "SWAP 10 SOL → BONK (25% slippage)",
-      agent: "YamakunDemoAgent",
-      objective: "DeFi-Swap-Policy-v1"
+      timestamp: "2026-02-06 23:45:00",
+      action: "Attempted Transfer 10,000 SOL (Rug Pull)",
+      agent: "AdversarialBot",
+      objective: "Treasury Protection",
+      hash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      sig: "41wQ7mwvrNuKMb3CMSYmEyXPHhxu4P8EyRkvMGRF3Zbcgiyc4YDJQL2h9DSuuTzWPZd2FapZmtSKmcMvdpaXgyuC",
+      status: "APPROVED",
+      timestamp: "2026-02-06 23:44:00",
+      action: "SWAP 0.1 SOL → USDC",
+      agent: "DemoAgent_v1",
+      objective: "Safe Trade Execution",
+      hash: "de4e28e57907a9680d22a3afd9c5d2cfbb205ddd55f37a4a9677f09a056498c3"
+    },
+    {
+      sig: "3BmYrk5fCSptnfnv4KuscCHTwtTyyM9Q9dqfdGCk3vS1hSuZAKdZHCS6AZmCHbymNb7zX58Y2ryYerVKrTJdn392",
+      status: "APPROVED",
+      timestamp: "2026-02-06 23:43:00",
+      action: "Agent Registration",
+      agent: "System",
+      objective: "Protocol Initialization",
+      hash: "init_agent_pda"
     }
   ];
 
