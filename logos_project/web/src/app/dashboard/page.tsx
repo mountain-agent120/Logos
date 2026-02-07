@@ -17,8 +17,8 @@ export default function Home() {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
-  const [redTeamMode, setRedTeamMode] = useState(false); // New: Adversarial Mode
-  const [debugInfo, setDebugInfo] = useState<string>("Initializing..."); // Debug state
+  const [redTeamMode, setRedTeamMode] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string>("Initializing...");
 
   // State for Result Modal
   const [resultModal, setResultModal] = useState<{
@@ -32,7 +32,7 @@ export default function Home() {
   // Helper: Close Modal
   const closeModal = () => setResultModal({ ...resultModal, isOpen: false });
 
-  // Demo Logs (Backfilled with REAL Devnet Transactions)
+  // Demo Logs 
   const DEMO_LOGS = [
     {
       sig: "2jCviQoFDX855Sd5PYBxh4tapT5njR6XCdw9D3zCKDLshsDcYjp5NfG7RJbD87P5TatDrcLhcMPahXna72w5cngn",
@@ -73,9 +73,13 @@ export default function Home() {
   }
 
   // Action: Scan & Log (Real Logos Program Interaction)
-  const handleScanAndLog = async () => {
+  // Fix: Accept optional overrides to ensure state updates don't race
+  const handleScanAndLog = async (overrideAmount?: number, overrideRecipient?: string) => {
     if (!publicKey) return;
     setLoading(true);
+
+    const checkAmount = overrideAmount !== undefined ? overrideAmount : amount;
+    const checkRecipient = overrideRecipient || recipient;
 
     try {
       // Balance Check
@@ -92,7 +96,6 @@ export default function Home() {
       const encoder = new TextEncoder();
 
       // PDA: Agent Account
-      // seeds = [b"agent", authority.key().as_ref()]
       const [agentPda] = PublicKey.findProgramAddressSync(
         [encoder.encode("agent"), publicKey.toBuffer()],
         PROGRAM_ID
@@ -129,28 +132,27 @@ export default function Home() {
         transaction.add(registerIx);
 
         // Memo for Registration
-        const memoIx = new TransactionInstruction({
+        const memoRegIx = new TransactionInstruction({
           keys: [{ pubkey: publicKey, isSigner: true, isWritable: true }],
           programId: new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"),
           data: Buffer.from(JSON.stringify({ v: 1, type: "logos_log", note: `Agent Registered: ${agentId}` }), 'utf-8')
         });
-        transaction.add(memoIx);
+        transaction.add(memoRegIx);
       }
 
       // 3. Decision Logic & BLOCK Check
-      // This is the core logic for Adversarial Mode simulation
-      const isRugPull = amount > 100;
-      const isSanctions = recipient.includes("Tornado") || recipient.includes("Attacker");
+      // Use the 'check' variables which are guaranteed to be current
+      const isRugPull = checkAmount > 100;
+      const isSanctions = checkRecipient.includes("Tornado") || checkRecipient.includes("Attacker");
       const isBlocked = isRugPull || isSanctions;
 
       // NOTE: We don't send money in this simulation, we just Log the Decision.
-      // In a real agent, the "Action" (transfer) would be skipped if Blocked.
 
       const objectiveId = isBlocked ? "TREASURY_PROTECTION" : `OBJ-${Date.now().toString().slice(-6)}`;
       const decisionHash = await computeHash({
         action: isBlocked ? "BLOCK" : "APPROVE",
-        target: recipient,
-        amount: amount,
+        target: checkRecipient,
+        amount: checkAmount,
         timestamp: Date.now()
       });
 
@@ -161,7 +163,6 @@ export default function Home() {
       );
 
       // 5. Log Decision Instruction
-      // global:log_decision -> [160, 73, 104, 176, 37, 115, 231, 204]
       const discLog = new Uint8Array([160, 73, 104, 176, 37, 115, 231, 204]);
       const hashBytes = encoder.encode(decisionHash);
       const objBytes = encoder.encode(objectiveId);
@@ -187,14 +188,13 @@ export default function Home() {
       transaction.add(logIx);
 
       // 6. Add Memo (Status & Note)
-      // This allows the dashboard to display BLOCKED status
       const memoContent = {
         v: 1,
         type: "logos_log",
         status: isBlocked ? "BLOCKED" : "APPROVED",
         note: isBlocked
           ? (isRugPull ? "BLOCKED: Treasury Drain Attempt > 100 SOL" : "BLOCKED: Sanctions Evasion Policy")
-          : `Safe Trade: ${amount} SOL -> ${recipient.slice(0, 6)}...`
+          : `Safe Trade: ${checkAmount} SOL -> ${checkRecipient.slice(0, 6)}...`
       };
 
       const memoIx = new TransactionInstruction({
@@ -337,7 +337,6 @@ export default function Home() {
             } else if (memoIx.data) {
               try {
                 // Simple heuristic: try to decode if it looks like base58
-                // But for now, let's rely on parsed or simple display
                 memoText = "Memo Found";
               } catch (e) { }
             }
@@ -383,8 +382,6 @@ export default function Home() {
 
       if (newLogs.length > 0) {
         setLogs(newLogs);
-      } else if (activeTab === "my") {
-        // If no logs found for user, maybe empty
       }
 
     } catch (err: any) {
@@ -461,8 +458,9 @@ export default function Home() {
                   className="btn"
                   onClick={() => {
                     setRecipient("AttackerWallet_8xg1...");
-                    setAmount(10000); // Trigger Limit Rule
-                    setTimeout(() => handleScanAndLog(), 100);
+                    setAmount(10000);
+                    // Use direct values to avoid state update race conditions
+                    handleScanAndLog(10000, "AttackerWallet_8xg1...");
                   }}
                   disabled={loading || !publicKey}
                   style={{
@@ -487,9 +485,9 @@ export default function Home() {
                 <button
                   className="btn"
                   onClick={() => {
-                    setRecipient("TornadoCash_Authority..."); // Trigger Blacklist Rule logic
+                    setRecipient("TornadoCash_Authority...");
                     setAmount(50);
-                    setTimeout(() => handleScanAndLog(), 100);
+                    handleScanAndLog(50, "TornadoCash_Authority...");
                   }}
                   disabled={loading || !publicKey}
                   style={{
@@ -544,7 +542,7 @@ export default function Home() {
 
                 <button
                   className="btn btn-primary"
-                  onClick={handleScanAndLog}
+                  onClick={() => handleScanAndLog()}
                   disabled={!publicKey || loading}
                   style={{ marginTop: "1rem", opacity: (!publicKey || loading) ? 0.5 : 1 }}
                 >
@@ -614,7 +612,7 @@ export default function Home() {
                   padding: "1rem",
                   borderRadius: "8px",
                   borderLeft: `3px solid ${log.status === "APPROVED" ? "var(--success)" : "var(--error)"}`,
-                  opacity: redTeamMode && log.status !== "BLOCKED" ? 0.5 : 1 // Highlight blocked logs in Red Team mode
+                  opacity: redTeamMode && log.status !== "BLOCKED" ? 0.5 : 1
                 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
                     <span className={`status-badge ${log.status === "APPROVED" ? "success" : "error"}`}>

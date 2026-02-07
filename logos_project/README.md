@@ -81,11 +81,20 @@ const agent = new LogosAgent({ connection, wallet });
 // 1. Register your Agent
 await agent.registerAgent("MyTradingBot_v1");
 
-// 2. Log a Decision
+// 2. Log a Decision (Privacy-Preserving)
+// The 'actionPlan' is hashed and hidden. Only 'publicNote' (Memo) is visible.
 const tx = await agent.logDecision({
     objectiveId: "ARB_STRATEGY_ETH_USDC",
     observations: [{ type: "price", source: "jupiter", value: 2500 }],
-    actionPlan: { action: "swap", amount: 10, input: "ETH", output: "USDC" }
+    actionPlan: { 
+        action: "swap", 
+        amount: 10, 
+        input: "ETH", 
+        output: "USDC",
+        strategy_hidden: "Alpha_V2_Secret" 
+    }
+}, {
+    publicNote: "Executing Swap 10 ETH -> USDC (Strategy Alpha)" // Visible on Dashboard via Memo
 });
 
 console.log("Proof of Decision anchored on Solana:", tx);
