@@ -177,16 +177,19 @@ export default function Home() {
       // 5. Log Decision Instruction
       const discLog = new Uint8Array([160, 73, 104, 176, 37, 115, 231, 204]);
 
-      // FIX: decison_hash is [u8; 32], not String. Need to decode Hex.
-      const hashBytes = Buffer.from(decisionHash, 'hex'); // 32 bytes raw
+      // CRITICAL FIX: Python SDK treats decision_hash as String (hex string), not raw bytes!
+      // We must send it as UTF-8 encoded string with length prefix, NOT as 32-byte buffer.
+      const hashBytes = encoder.encode(decisionHash); // Hex string as UTF-8 bytes (64 bytes)
       const objBytes = encoder.encode(objectiveId);
 
-      // Buffer Layout: Discriminator (8) + Hash (32) + StringLen (4) + StringBody (N)
-      const logData = Buffer.alloc(8 + 32 + 4 + objBytes.length);
+      // Buffer Layout: Discriminator (8) + HashLen (4) + Hash (64) + ObjLen (4) + Obj (N)
+      const logData = Buffer.alloc(8 + 4 + hashBytes.length + 4 + objBytes.length);
       let offset = 0;
       logData.set(discLog, offset); offset += 8;
-      // No length prefix for [u8; 32]
-      logData.set(hashBytes, offset); offset += 32;
+
+      // String serialization: length prefix + bytes
+      logData.writeUInt32LE(hashBytes.length, offset); offset += 4;
+      logData.set(hashBytes, offset); offset += hashBytes.length;
 
       logData.writeUInt32LE(objBytes.length, offset); offset += 4;
       logData.set(objBytes, offset); offset += objBytes.length;
