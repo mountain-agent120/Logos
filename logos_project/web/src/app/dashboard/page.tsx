@@ -32,6 +32,11 @@ export default function Home() {
   // Helper: Close Modal
   const closeModal = () => setResultModal({ ...resultModal, isOpen: false });
 
+  // Verify Transaction State
+  const [scanSignature, setScanSignature] = useState("");
+  const [scanResult, setScanResult] = useState<any>(null);
+  const [scanning, setScanning] = useState(false);
+
   // Demo Logs 
   const DEMO_LOGS = [
     {
@@ -74,6 +79,68 @@ export default function Home() {
 
   // Action: Scan & Log (Real Logos Program Interaction)
   // Fix: Accept optional overrides to ensure state updates don't race
+  // Action: Verify External Transaction (AgentBets Integration)
+  const handleVerifyTransaction = async () => {
+    if (!scanSignature) return;
+    setScanning(true);
+    setScanResult(null);
+
+    try {
+      const heliusConnection = new Connection("https://api.devnet.solana.com", "confirmed");
+      const tx = await heliusConnection.getTransaction(scanSignature, { maxSupportedTransactionVersion: 0 });
+
+      if (!tx) {
+        setScanResult({ error: "Transaction not found on Devnet" });
+        return;
+      }
+
+      // Parse Logs
+      const logs = tx.meta?.logMessages || [];
+      // Relaxed Matching for Memo
+      const memoLine = logs.find(l => l.includes("Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr log: ") || l.includes("Program log: Memo"));
+      const logosLine = logs.find(l => l.includes("Program 3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6 log: Instruction: LogDecision"));
+
+      let parsedMemo: any = "No Memo Found";
+      if (memoLine) {
+        // Extract content: Try to find start of JSON or string
+        // Typical format: "Program log: Memo (len 133): \"{\"v\":1...}\""
+        let rawMemo = "";
+
+        if (memoLine.includes("Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr log: ")) {
+          rawMemo = memoLine.replace("Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr log: ", "");
+        } else {
+          // Generic match, look for quote or colon
+          const match = memoLine.match(/Memo.*?:\s*(.*)/);
+          if (match && match[1]) rawMemo = match[1];
+          else rawMemo = memoLine;
+        }
+
+        // Remove quote chars if wrapping JSON string
+        const memoContent = rawMemo.trim().startsWith('"') ? rawMemo.trim().slice(1, -1) : rawMemo;
+        try {
+          // Handle escaped quotes in logs (Instruction logs often escape internal quotes)
+          const unescaped = memoContent.replace(/\\"/g, '"');
+          parsedMemo = JSON.parse(unescaped);
+        } catch (e) {
+          parsedMemo = memoContent;
+        }
+      }
+
+      setScanning(false);
+      setScanResult({
+        status: tx.meta?.err ? "FAILED" : "SUCCESS",
+        slot: tx.slot,
+        memo: parsedMemo,
+        logosDecision: logosLine ? "✅ Verified Logos Decision" : "❌ No Decision Logged",
+        logs: logs.slice(0, 5) // Show first 5 logs for context
+      });
+
+    } catch (e: any) {
+      setScanResult({ error: e.message });
+      setScanning(false);
+    }
+  };
+
   const handleScanAndLog = async (overrideAmount?: number, overrideRecipient?: string) => {
     if (!publicKey) return;
     setLoading(true);
@@ -83,7 +150,7 @@ export default function Home() {
 
     try {
       // Use Helius RPC for reliable simulation
-      const heliusConnection = new Connection("https://devnet.helius-rpc.com/?api-key=4bc3bcef-b068-47c7-bd21-41b0d2db75b6", "confirmed");
+      const heliusConnection = new Connection("https://api.devnet.solana.com", "confirmed");
 
       // Balance Check
       const balance = await heliusConnection.getBalance(publicKey);
@@ -645,6 +712,45 @@ export default function Home() {
                 )}
               </div>
             </>
+          )}
+        </section>
+
+        {/* Verify External Transaction */}
+        <section className="card" style={{ marginTop: "1rem" }}>
+          <h2 style={{ marginBottom: "1rem", color: "#ccc" }}>🔍 Verify Transaction (Scan)</h2>
+          <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem" }}>
+            <input
+              type="text"
+              placeholder="Paste Tx Signature (e.g. AgentBets Atomic Tx)"
+              value={scanSignature}
+              onChange={(e) => setScanSignature(e.target.value)}
+              style={{ flex: 1, padding: "0.75rem", background: "#222", border: "1px solid #444", color: "#fff", borderRadius: "8px" }}
+            />
+            <button
+              className="btn"
+              onClick={handleVerifyTransaction}
+              disabled={scanning || !scanSignature}
+              style={{ background: "#444", border: "1px solid #666" }}
+            >
+              {scanning ? "Scanning..." : "Scan"}
+            </button>
+          </div>
+
+          {scanResult && (
+            <div style={{ padding: "1rem", background: "#111", borderRadius: "8px", border: "1px solid #333" }}>
+              {scanResult.error ? (
+                <p style={{ color: "red" }}>{scanResult.error}</p>
+              ) : (
+                <div style={{ fontSize: "0.9rem" }}>
+                  <div style={{ marginBottom: "0.5rem" }}>Status: <span style={{ color: scanResult.status === "SUCCESS" ? "#0f0" : "red" }}>{scanResult.status}</span></div>
+                  <div style={{ marginBottom: "0.5rem" }}>Logos Proof: <strong>{scanResult.logosDecision}</strong></div>
+                  <div style={{ marginBottom: "0.5rem", color: "#888" }}>Memo (Decoded):</div>
+                  <pre style={{ background: "#000", padding: "0.5rem", borderRadius: "4px", color: "#0f0", overflowX: "auto" }}>
+                    {typeof scanResult.memo === 'object' ? JSON.stringify(scanResult.memo, null, 2) : scanResult.memo}
+                  </pre>
+                </div>
+              )}
+            </div>
           )}
         </section>
 
