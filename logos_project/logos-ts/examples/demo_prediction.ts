@@ -39,7 +39,7 @@ async function main() {
     const agent = new LogosAgent({
         connection,
         wallet,
-        programId: "Ldm2tof9CHcyaHWh3nBkwiWNGYN8rG5tex7NMbHQxG3" // Canonical for Day 5
+        programId: "3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6" // Correct Devnet ID
     });
 
     console.log("DEBUG: Checking agent instance...");
@@ -47,6 +47,20 @@ async function main() {
     console.log("DEBUG: Prototype methods =", Object.getOwnPropertyNames(Object.getPrototypeOf(agent)));
 
     try {
+        // --- STEP 0: Register Agent (if not already) ---
+        const agentPda = agent.getAgentPda(wallet.publicKey);
+        const agentAccountInfo = await connection.getAccountInfo(agentPda);
+
+        if (!agentAccountInfo) {
+            console.log("📝 Agent not registered. Registering...");
+            const regSig = await agent.registerAgent(`Agent-${wallet.publicKey.toBase58().slice(0, 8)}`);
+            console.log(`✅ Agent Registered: https://explorer.solana.com/tx/${regSig}?cluster=devnet`);
+            // Wait for confirmation
+            await new Promise(r => setTimeout(r, 2000));
+        } else {
+            console.log("✅ Agent already registered.");
+        }
+
         // --- SCENARIO: Predicting SOL Price for Day 6 ---
         const prediction = {
             asset: "SOL",

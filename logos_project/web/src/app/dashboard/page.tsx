@@ -422,11 +422,61 @@ export default function Home() {
     }
   };
 
-  // Helper to trigger fetch on load
+  // Smart polling with Visibility API & Exponential Backoff
   useEffect(() => {
-    fetchLogs();
-    const interval = setInterval(fetchLogs, 10000);
-    return () => clearInterval(interval);
+    let intervalId: NodeJS.Timeout | null = null;
+    let currentInterval = 10000; // Start with 10s
+    let lastActivityTime = Date.now();
+
+    const resetInterval = () => {
+      lastActivityTime = Date.now();
+      currentInterval = 10000; // Reset to 10s on activity
+    };
+
+    const startPolling = () => {
+      fetchLogs();
+
+      const poll = () => {
+        // Check if tab is visible
+        if (document.hidden) {
+          return; // Skip polling if tab is hidden
+        }
+
+        // Exponential backoff: increase interval if no activity
+        const timeSinceActivity = Date.now() - lastActivityTime;
+        if (timeSinceActivity > 60000) {
+          currentInterval = Math.min(60000, currentInterval * 1.5); // Max 60s
+        }
+
+        fetchLogs();
+      };
+
+      intervalId = setInterval(poll, currentInterval);
+    };
+
+    // Listen for visibility changes
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        resetInterval();
+        fetchLogs(); // Fetch immediately when tab becomes visible
+      }
+    };
+
+    // Listen for user interactions (reset backoff)
+    const handleUserActivity = () => resetInterval();
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('click', handleUserActivity);
+    window.addEventListener('keydown', handleUserActivity);
+
+    startPolling();
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('click', handleUserActivity);
+      window.removeEventListener('keydown', handleUserActivity);
+    };
   }, [activeTab]);
 
   return (
@@ -443,10 +493,26 @@ export default function Home() {
         </div>
 
         <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
-          <div style={{ display: "flex", gap: "0.5rem" }}>
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
             <span style={{ fontSize: "0.8rem", color: debugInfo.includes("Error") ? "#ff4444" : "#666" }}>
               {debugInfo}
             </span>
+            <button
+              onClick={() => fetchLogs()}
+              style={{
+                padding: "0.25rem 0.5rem",
+                background: "#333",
+                color: "#aaa",
+                border: "1px solid #444",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontSize: "0.7rem",
+                transition: "all 0.2s"
+              }}
+              title="Manually refresh logs"
+            >
+              🔄
+            </button>
           </div>
 
           <button

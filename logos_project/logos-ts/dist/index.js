@@ -43,7 +43,7 @@ const crypto = __importStar(require("crypto"));
  */
 // Constants
 const PROGRAM_ID_DEVNET = "3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6";
-const MEMO_PROGRAM_ID = new web3_js_1.PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCXgDLGmfcHr");
+const MEMO_PROGRAM_ID = new web3_js_1.PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
 // Anchor Discriminators
 const DISCRIMINATOR_REGISTER = buffer_1.Buffer.from([135, 157, 66, 195, 2, 113, 175, 30]);
 const DISCRIMINATOR_LOG = buffer_1.Buffer.from([160, 73, 104, 176, 37, 115, 231, 204]);
