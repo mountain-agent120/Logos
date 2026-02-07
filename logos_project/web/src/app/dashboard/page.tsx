@@ -82,8 +82,11 @@ export default function Home() {
     const checkRecipient = overrideRecipient || recipient;
 
     try {
+      // Use Helius RPC for reliable simulation
+      const heliusConnection = new Connection("https://devnet.helius-rpc.com/?api-key=4bc3bcef-b068-47c7-bd21-41b0d2db75b6", "confirmed");
+
       // Balance Check
-      const balance = await connection.getBalance(publicKey);
+      const balance = await heliusConnection.getBalance(publicKey);
       if (balance < 0.002 * 1e9) {
         setResultModal({
           isOpen: true, type: "error", title: "Insufficient SOL",
@@ -102,7 +105,7 @@ export default function Home() {
       );
 
       // 1. Check if Agent Account Exists
-      const agentAccountInfo = await connection.getAccountInfo(agentPda);
+      const agentAccountInfo = await heliusConnection.getAccountInfo(agentPda);
       const isRegistered = agentAccountInfo !== null;
 
       const transaction = new Transaction();
@@ -164,14 +167,18 @@ export default function Home() {
 
       // 5. Log Decision Instruction
       const discLog = new Uint8Array([160, 73, 104, 176, 37, 115, 231, 204]);
-      const hashBytes = encoder.encode(decisionHash);
+
+      // FIX: decison_hash is [u8; 32], not String. Need to decode Hex.
+      const hashBytes = Buffer.from(decisionHash, 'hex'); // 32 bytes raw
       const objBytes = encoder.encode(objectiveId);
 
-      const logData = Buffer.alloc(8 + 4 + hashBytes.length + 4 + objBytes.length);
+      // Buffer Layout: Discriminator (8) + Hash (32) + StringLen (4) + StringBody (N)
+      const logData = Buffer.alloc(8 + 32 + 4 + objBytes.length);
       let offset = 0;
       logData.set(discLog, offset); offset += 8;
-      logData.writeUInt32LE(hashBytes.length, offset); offset += 4;
-      logData.set(hashBytes, offset); offset += hashBytes.length;
+      // No length prefix for [u8; 32]
+      logData.set(hashBytes, offset); offset += 32;
+
       logData.writeUInt32LE(objBytes.length, offset); offset += 4;
       logData.set(objBytes, offset); offset += objBytes.length;
 
@@ -204,8 +211,8 @@ export default function Home() {
       });
       transaction.add(memoIx);
 
-      // 7. Send Transaction
-      const sig = await sendTransaction(transaction, connection, { skipPreflight: false });
+      // 7. Send Transaction using Helius
+      const sig = await sendTransaction(transaction, heliusConnection, { skipPreflight: false });
       console.log("Tx Signature:", sig);
 
       // 8. Result Modal
