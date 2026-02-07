@@ -1,0 +1,17 @@
+{
+    "name": "remotion-demo",
+    "version": "0.1.0",
+    "dependencies": {
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1",
+        "remotion": "^4.0.419"
+    },
+    "devDependencies": {
+        "@remotion/cli": "^4.0.419",
+        "@types/react": "^18.3.28",
+        "typescript": "^5.9.3"
+    },
+    "scripts": {
+        "build": "remotion render src/index.ts MyComp out/video.mp4"
+    }
+}
