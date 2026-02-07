@@ -6,7 +6,7 @@ import { Connection, PublicKey, Transaction, TransactionInstruction, SystemProgr
 import { Buffer } from "buffer";
 
 // Constants
-const PROGRAM_ID = new PublicKey("Ldm2tof9CHcyaHWh3nBkwiWNGYN8rG5tex7NMbHQxG3");
+const PROGRAM_ID = new PublicKey("3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6");
 
 export default function Home() {
   const { connection } = useConnection();
@@ -380,6 +380,8 @@ export default function Home() {
                   const data = JSON.parse(jsonStr);
 
                   if (data.status) status = data.status;
+                  if (data.oid) objective = data.oid;
+                  if (data.objective_id) objective = data.objective_id;
 
                   // Privacy Update: Prioritize 'note', fallback to 'action'
                   if (data.note) action = data.note;

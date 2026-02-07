@@ -42,8 +42,8 @@ const crypto = __importStar(require("crypto"));
  * Provides "Proof of Decision" logging on Solana with privacy controls.
  */
 // Constants
-const PROGRAM_ID_DEVNET = "Ldm2tof9CHcyaHWh3nBkwiWNGYN8rG5tex7NMbHQxG3";
-const MEMO_PROGRAM_ID = new web3_js_1.PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
+const PROGRAM_ID_DEVNET = "3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6";
+const MEMO_PROGRAM_ID = new web3_js_1.PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCXgDLGmfcHr");
 // Anchor Discriminators
 const DISCRIMINATOR_REGISTER = buffer_1.Buffer.from([135, 157, 66, 195, 2, 113, 175, 30]);
 const DISCRIMINATOR_LOG = buffer_1.Buffer.from([160, 73, 104, 176, 37, 115, 231, 204]);
@@ -132,16 +132,16 @@ class LogosAgent {
             keys,
             data
         });
-        // Add Memo (Privacy Focused)
+        // Add Memo (Privacy Focused - minimal info)
+        // We do NOT log full observations/actionPlan here.
         const memoObj = {
             v: 1,
             type: "logos_log",
-            status: "APPROVED",
-            note: options?.publicNote || decision.objectiveId
+            oid: decision.objectiveId,
+            hash: decisionHash.substring(0, 16) + "..." // Short hash for visibility
         };
-        if (decision.objectiveId.toUpperCase().includes("RUG") ||
-            (options?.publicNote?.toUpperCase().includes("BLOCKED"))) {
-            memoObj.status = "BLOCKED";
+        if (options?.publicNote) {
+            memoObj.note = options.publicNote;
         }
         const memoIx = new web3_js_1.TransactionInstruction({
             keys: [{ pubkey: authority, isSigner: true, isWritable: true }],
@@ -162,20 +162,20 @@ class LogosAgent {
     async commit(data, topicId, options) {
         const salt = options?.salt || crypto.randomBytes(16).toString('hex');
         // Commitment = SHA256(JSON(data) + salt)
-        // Sort keys to ensure deterministic JSON
         const dataStr = JSON.stringify(data, Object.keys(data).sort());
         const commitment = crypto.createHash('sha256').update(dataStr + salt).digest('hex');
         if (options?.dryRun) {
             return { signature: `dry_run:${commitment}`, salt, commitment };
         }
+        // Log to Logos Program (PoD) + Memo
+        // We use "COMMIT:<topicId>" as objectiveId
         const objectiveId = `COMMIT:${topicId}`;
         const decision = {
             objectiveId,
             observations: [],
             actionPlan: {
                 action: "COMMIT",
-                commitment_hash: commitment,
-                // We DON'T include the data or salt here!
+                commitment_hash: commitment
             }
         };
         const tx = await this.logDecision(decision, {
@@ -195,21 +195,22 @@ class LogosAgent {
         // 1. Re-calculate commitment
         const dataStr = JSON.stringify(data, Object.keys(data).sort());
         const commitment = crypto.createHash('sha256').update(dataStr + salt).digest('hex');
-        // 2. Log the Reveal
         const objectiveId = `REVEAL:${topicId}`;
         const decision = {
             objectiveId,
             observations: [],
             actionPlan: {
                 action: "REVEAL",
-                original_data: data,
-                salt: salt,
+                // We log the fact that we revealed, but data stays off-chain (or in Memo/IPFS if needed)
                 verified_commitment: commitment
             },
             dryRun: options?.dryRun
         };
+        // In the Memo, we reveal the SALT. 
+        // Verifiers need: Data (from off-chain source) + Salt (from on-chain Memo) -> Hash (on-chain Commit)
+        const memoNote = `REVEAL:${topicId} Salt:${salt} Hash:${commitment.substring(0, 8)}...`;
         const tx = await this.logDecision(decision, {
-            publicNote: `Reveal for ${topicId} (Verified Hash: ${commitment.slice(0, 8)}...)`
+            publicNote: memoNote
         });
         return { signature: tx, commitment };
     }
