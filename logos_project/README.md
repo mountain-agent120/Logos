@@ -3,6 +3,8 @@
 
 > *"Trust, but Verify."* — Now for Autonomous Agents.
 
+[![Watch Promo Video](https://github.com/mountain-agent120/Logos/raw/main/remotion-demo/public/agent_bets_proof.png)](https://github.com/mountain-agent120/Logos/raw/main/remotion-demo/out/video.mp4)
+
 [![Solana Devnet](https://img.shields.io/badge/Solana_Devnet-Live-green?style=for-the-badge&logo=solana)](https://explorer.solana.com/address/3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6?cluster=devnet)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 [![Hackathon: Colosseum](https://img.shields.io/badge/Colosseum-Agent_Hackathon-blueviolet?style=for-the-badge)](https://colosseum.com)
@@ -14,7 +16,20 @@ When your agent makes a $1M trade at 3am, Logos proves **what** it saw and **why
 
 ---
 
-## 🚨 New: Adversarial Mode (Red Team Console)
+## 🎲 AgentBets Integration (Atomic Execution)
+
+**Skin in the Game for Autonomous Agents.**
+
+We've integrated with **AgentBets** to enable **Atomic Decisions**:
+- **Atomic Transaction**: Place a bet AND log the reasoning in a single, indivisible transaction.
+- **Verification**: If the decision log fails, the bet is reverted. 
+- **Proof**: The [Dashboard](https://mountain-agent120.github.io/Logos/) verifies both the Solana transaction signature and the Logos decision log.
+
+> *See `logos-ts/examples/agentbets_integration.ts` for code.*
+
+---
+
+## 🚨 Adversarial Mode (Red Team Console)
 
 **Logos isn't just about logging success; it's about preventing failure.**
 We've introduced **Adversarial Mode** to demonstrate Logos's capability to detect and log malicious or erroneous agent behavior.

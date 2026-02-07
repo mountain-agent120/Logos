@@ -5,6 +5,8 @@ Designed for AI Agents and dApps to anchor decisions immutably while preserving 
 
 Program ID: `3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6` (Devnet)
 
+[![Watch Demo](https://github.com/mountain-agent120/Logos/raw/main/remotion-demo/public/agent_bets_proof.png)](https://github.com/mountain-agent120/Logos/raw/main/remotion-demo/out/video.mp4)
+
 ## Installation
 
 ```bash
