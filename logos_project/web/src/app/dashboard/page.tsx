@@ -259,6 +259,17 @@ export default function Home() {
     }
   };
 
+  // Dedicated handlers for attack scenarios (ensures correct parameters)
+  const handleRugPullScenario = async () => {
+    console.log("[Logos] Executing Rug Pull Scenario: 10000 SOL to AttackerWallet");
+    await handleScanAndLog(10000, "AttackerWallet_8xg1...");
+  };
+
+  const handleSanctionsScenario = async () => {
+    console.log("[Logos] Executing Sanctions Evasion Scenario: 50 SOL to TornadoCash");
+    await handleScanAndLog(50, "TornadoCash_Authority...");
+  };
+
   // State for Tabs
   const [activeTab, setActiveTab] = useState<"my" | "global">("global");
 
@@ -456,12 +467,7 @@ export default function Home() {
                 {/* Attack Scenario 1: Rug Pull */}
                 <button
                   className="btn"
-                  onClick={() => {
-                    setRecipient("AttackerWallet_8xg1...");
-                    setAmount(10000);
-                    // Use direct values to avoid state update race conditions
-                    handleScanAndLog(10000, "AttackerWallet_8xg1...");
-                  }}
+                  onClick={handleRugPullScenario}
                   disabled={loading || !publicKey}
                   style={{
                     background: "#330000",
@@ -484,11 +490,7 @@ export default function Home() {
                 {/* Attack Scenario 2: Sanctions Evasion */}
                 <button
                   className="btn"
-                  onClick={() => {
-                    setRecipient("TornadoCash_Authority...");
-                    setAmount(50);
-                    handleScanAndLog(50, "TornadoCash_Authority...");
-                  }}
+                  onClick={handleSanctionsScenario}
                   disabled={loading || !publicKey}
                   style={{
                     background: "#330000",
