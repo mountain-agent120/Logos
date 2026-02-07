@@ -17,6 +17,7 @@ export default function Home() {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
+  const [redTeamMode, setRedTeamMode] = useState(false); // New: Adversarial Mode
   const [debugInfo, setDebugInfo] = useState<string>("Initializing..."); // Debug state
 
   // State for Result Modal
@@ -31,7 +32,7 @@ export default function Home() {
   // Helper: Close Modal
   const closeModal = () => setResultModal({ ...resultModal, isOpen: false });
 
-  // Demo Mode Fake Logs (Backfilled with REAL Devnet Transactions)
+  // Demo Logs (Backfilled with REAL Devnet Transactions)
   const DEMO_LOGS = [
     {
       sig: "2jCviQoFDX855Sd5PYBxh4tapT5njR6XCdw9D3zCKDLshsDcYjp5NfG7RJbD87P5TatDrcLhcMPahXna72w5cngn",
@@ -71,34 +72,6 @@ export default function Home() {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  // Helper: Decode On-Chain Account Data
-  const decodeAccountData = (data: Buffer, pubkey: PublicKey) => {
-    try {
-      // Skip discriminator (8 bytes)
-      let offset = 8;
-
-      // Read Hash (String: len + bytes)
-      const hashLen = data.readUInt32LE(offset);
-      offset += 4;
-      const hash = data.subarray(offset, offset + hashLen).toString('utf-8');
-      offset += hashLen;
-
-      // Read Objective ID
-      const objIdLen = data.readUInt32LE(offset);
-      offset += 4;
-      const objId = data.subarray(offset, offset + objIdLen).toString('utf-8');
-
-      return {
-        hash,
-        objective: objId,
-        pubkey: pubkey.toString()
-      };
-    } catch (e) {
-      // console.error("Failed to decode account:", e); // Expected for other account types
-      return null;
-    }
-  };
-
   // Action: Scan & Log (Real Logos Program Interaction)
   const handleScanAndLog = async () => {
     if (!publicKey) return;
@@ -108,20 +81,13 @@ export default function Home() {
       // Balance Check
       const balance = await connection.getBalance(publicKey);
       if (balance < 0.002 * 1e9) {
-        alert("Insufficient SOL. You need at least 0.002 SOL on Devnet to register and log.\nPlease use a faucet.");
+        setResultModal({
+          isOpen: true, type: "error", title: "Insufficient SOL",
+          message: "You need at least 0.002 SOL on Devnet to register and log.\nPlease use a faucet."
+        });
         setLoading(false);
         return;
       }
-
-      // 0. Constants & Encoders
-      const getIdlDiscriminator = (name: string) => {
-        // Correct discriminators for Logos Core
-        // global:register_agent -> [135, 157, 66, 195, 2, 113, 175, 30]
-        if (name === "register_agent") return new Uint8Array([135, 157, 66, 195, 2, 113, 175, 30]);
-        // global:log_decision -> [160, 73, 104, 176, 37, 115, 231, 204]
-        if (name === "log_decision") return new Uint8Array([160, 73, 104, 176, 37, 115, 231, 204]);
-        return new Uint8Array([]);
-      };
 
       const encoder = new TextEncoder();
 
@@ -142,12 +108,10 @@ export default function Home() {
       if (!isRegistered) {
         console.log("Agent not registered. Adding register instruction...");
         const agentId = "SimulatedAgent-" + Date.now().toString().slice(-4);
-        const discriminator = getIdlDiscriminator("register_agent");
+        // global:register_agent -> [135, 157, 66, 195, 2, 113, 175, 30]
+        const discriminator = new Uint8Array([135, 157, 66, 195, 2, 113, 175, 30]);
 
-        // Serialize: [Discriminator] + [String Length (u32)] + [String Bytes]
         const idBytes = encoder.encode(agentId);
-
-        // Manual Buffer construction compatible with browser/Buffer import
         const data = Buffer.alloc(8 + 4 + idBytes.length);
         data.set(discriminator, 0);
         data.writeUInt32LE(idBytes.length, 8);
@@ -162,45 +126,51 @@ export default function Home() {
           ],
           data: data
         });
-
         transaction.add(registerIx);
+
+        // Memo for Registration
+        const memoIx = new TransactionInstruction({
+          keys: [{ pubkey: publicKey, isSigner: true, isWritable: true }],
+          programId: new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"),
+          data: Buffer.from(JSON.stringify({ v: 1, type: "logos_log", note: `Agent Registered: ${agentId}` }), 'utf-8')
+        });
+        transaction.add(memoIx);
       }
 
-      // 3. Create Decision Data
-      const decision = {
-        agent: "YamakunAgent",
-        action: amount > 100 ? "BLOCK" : "APPROVE",
-        target: recipient,
-        reason: amount > 100 ? "Amount exceeds limit" : "Compliance check passed",
-        timestamp: new Date().toISOString()
-      };
+      // 3. Decision Logic & BLOCK Check
+      // This is the core logic for Adversarial Mode simulation
+      const isRugPull = amount > 100;
+      const isSanctions = recipient.includes("Tornado") || recipient.includes("Attacker");
+      const isBlocked = isRugPull || isSanctions;
 
-      // 4. Compute Proof of Decision (PoD)
-      const decisionHash = await computeHash(decision);
-      const objectiveId = `DEMO-OBJ-${Date.now()}`;
+      // NOTE: We don't send money in this simulation, we just Log the Decision.
+      // In a real agent, the "Action" (transfer) would be skipped if Blocked.
+
+      const objectiveId = isBlocked ? "TREASURY_PROTECTION" : `OBJ-${Date.now().toString().slice(-6)}`;
+      const decisionHash = await computeHash({
+        action: isBlocked ? "BLOCK" : "APPROVE",
+        target: recipient,
+        amount: amount,
+        timestamp: Date.now()
+      });
 
       // PDA: Decision Record
-      // seeds = [b"decision", agent_account.key().as_ref(), objective_id.as_bytes()]
       const [decisionPda] = PublicKey.findProgramAddressSync(
         [encoder.encode("decision"), agentPda.toBuffer(), encoder.encode(objectiveId)],
         PROGRAM_ID
       );
 
       // 5. Log Decision Instruction
-      console.log("Adding log_decision instruction...");
-      const discLog = getIdlDiscriminator("log_decision");
+      // global:log_decision -> [160, 73, 104, 176, 37, 115, 231, 204]
+      const discLog = new Uint8Array([160, 73, 104, 176, 37, 115, 231, 204]);
       const hashBytes = encoder.encode(decisionHash);
       const objBytes = encoder.encode(objectiveId);
 
-      // Layout: [Disc(8)] + [HashStr(4+len)] + [ObjStr(4+len)]
       const logData = Buffer.alloc(8 + 4 + hashBytes.length + 4 + objBytes.length);
       let offset = 0;
-
       logData.set(discLog, offset); offset += 8;
-
       logData.writeUInt32LE(hashBytes.length, offset); offset += 4;
       logData.set(hashBytes, offset); offset += hashBytes.length;
-
       logData.writeUInt32LE(objBytes.length, offset); offset += 4;
       logData.set(objBytes, offset); offset += objBytes.length;
 
@@ -208,65 +178,79 @@ export default function Home() {
         programId: PROGRAM_ID,
         keys: [
           { pubkey: decisionPda, isSigner: false, isWritable: true },
-          { pubkey: agentPda, isSigner: false, isWritable: true }, // Verified: this account must be initialized by register_agent
-          { pubkey: publicKey, isSigner: true, isWritable: true }, // Authority
+          { pubkey: agentPda, isSigner: false, isWritable: true },
+          { pubkey: publicKey, isSigner: true, isWritable: true },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
         data: logData
       });
-
       transaction.add(logIx);
 
-      // 6. Send Transaction
-      // Note: We don't skip preflight here to get real errors if it fails
+      // 6. Add Memo (Status & Note)
+      // This allows the dashboard to display BLOCKED status
+      const memoContent = {
+        v: 1,
+        type: "logos_log",
+        status: isBlocked ? "BLOCKED" : "APPROVED",
+        note: isBlocked
+          ? (isRugPull ? "BLOCKED: Treasury Drain Attempt > 100 SOL" : "BLOCKED: Sanctions Evasion Policy")
+          : `Safe Trade: ${amount} SOL -> ${recipient.slice(0, 6)}...`
+      };
+
+      const memoIx = new TransactionInstruction({
+        keys: [{ pubkey: publicKey, isSigner: true, isWritable: true }],
+        programId: new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"),
+        data: Buffer.from(JSON.stringify(memoContent), 'utf-8')
+      });
+      transaction.add(memoIx);
+
+      // 7. Send Transaction
       const sig = await sendTransaction(transaction, connection, { skipPreflight: false });
       console.log("Tx Signature:", sig);
 
-      // 5. Optimistic UI Update / Success Modal
+      // 8. Result Modal
       setResultModal({
         isOpen: true,
-        type: "success",
-        title: "Decision Logged Successfully",
+        type: isBlocked ? "error" : "success",
+        title: isBlocked ? "🛑 Transaction BLOCKED" : "✅ Decision Logged",
         message: (
           <>
             <p style={{ color: "#ccc", marginBottom: "1rem" }}>
-              Your agent's decision has been cryptographically secured on the Solana Devnet.
+              {isBlocked
+                ? "Logos Policy Engine detected a violation and blocked the malicious action."
+                : "Your agent's decision has been cryptographically secured on the Solana Devnet."}
             </p>
-            <div style={{ background: "#222", padding: "0.75rem", borderRadius: "6px", fontSize: "0.8rem", fontFamily: "monospace", color: "#888", marginBottom: "1rem", wordBreak: "break-all" }}>
-              <strong>Hash:</strong> {decisionHash}
+            <div style={{ background: "#222", padding: "0.75rem", borderRadius: "6px", fontSize: "0.8rem", color: isBlocked ? "#ff4444" : "#00cc66", marginBottom: "1rem", fontFamily: "monospace" }}>
+              Status: {isBlocked ? "BLOCKED (Policy Violation)" : "APPROVED"}
             </div>
-            <p style={{ fontSize: "0.8rem", color: "#666" }}>
-              Objective ID: <span style={{ color: "#aaa" }}>{objectiveId}</span>
-            </p>
+            {isBlocked && (
+              <p style={{ fontSize: "0.8rem", color: "#666" }}>
+                This simulated attack was successfully intercepted. No funds were moved.
+              </p>
+            )}
           </>
         ),
         txSig: sig
       });
 
       // Auto-refresh logs after a short delay
-      setTimeout(() => fetchLogs(), 2000);
+      setTimeout(() => fetchLogs(), 5000);
 
     } catch (err: any) {
       console.error("Error logging decision:", err);
-
-      // User-friendly error handling
       let msg = "Transaction failed.";
       if (err.message) {
         if (err.message.includes("User rejected")) msg = "Transaction rejected by user.";
         else if (err.message.includes("simulation")) msg = "Simulation failed. Please verify your wallet balance (Devnet SOL needed).";
-        else msg = err.message; // Show raw error for debugging
+        else msg = err.message;
       }
 
       setResultModal({
-        isOpen: true,
-        type: "error",
-        title: "Transaction Failed / Blocked",
+        isOpen: true, type: "error", title: "Transaction Failed",
         message: (
           <>
-            <p style={{ color: "#ffaaaa", marginBottom: "1rem" }}>{msg}</p>
-            <p style={{ fontSize: "0.8rem", color: "#666" }}>
-              If this was an Adversarial Mode test, the transaction may have been blocked solely due to insufficient funds or network issues, as we are running in Simulator Mode.
-            </p>
+            <p>{msg}</p>
+            {msg.includes("Simulation failed") && <p style={{ fontSize: "0.8rem", color: "#666", marginTop: "0.5rem" }}>Check Developer Console for details.</p>}
           </>
         )
       });
@@ -303,15 +287,12 @@ export default function Home() {
       console.log(`[LogosDebug] Fetched ${signatures.length} signatures for ${activeTab}`);
       setDebugInfo(`Fetched ${signatures.length} sigs at ${new Date().toLocaleTimeString()}`);
 
-      // Clear error state if successful
-      if (debugInfo.includes("Error")) setDebugInfo("Connected");
-
       if (signatures.length === 0) {
         setLogs([]);
         return;
       }
 
-      // Fetch transactions individually to avoid "Batch requests not available" on Helius Free Tier
+      // Fetch transactions individually
       const txs = await Promise.all(
         signatures.map(async (s) => {
           try {
@@ -350,16 +331,10 @@ export default function Home() {
 
           // Parse Memo for enhanced details
           if (memoIx) {
-            // For getParsedTransaction, memo is often in 'parsed' field if supported, or 'data' if raw
-            // Memo v2 usually appears as generic instruction unless parsed specifically
-            // We assume raw data (Base58) if 'parsed' is missing, or string if parsed
-
             let memoText = "";
             if (memoIx.parsed) {
               memoText = typeof memoIx.parsed === 'string' ? memoIx.parsed : JSON.stringify(memoIx.parsed);
             } else if (memoIx.data) {
-              // Manual decode from Base58 (if needed, but web3.js parsed tx usually handles common programs)
-              // Assuming standard text
               try {
                 // Simple heuristic: try to decode if it looks like base58
                 // But for now, let's rely on parsed or simple display
@@ -369,8 +344,6 @@ export default function Home() {
 
             if (memoText) {
               try {
-                // Try to parse our JSON format
-                // Note: getParsedTransaction might return the memo text directly in 'parsed'
                 const jsonStart = memoText.indexOf('{');
                 const jsonEnd = memoText.lastIndexOf('}');
                 if (jsonStart >= 0 && jsonEnd > jsonStart) {
@@ -378,7 +351,11 @@ export default function Home() {
                   const data = JSON.parse(jsonStr);
 
                   if (data.status) status = data.status;
-                  if (data.action) action = typeof data.action === 'string' ? data.action : JSON.stringify(data.action);
+
+                  // Privacy Update: Prioritize 'note', fallback to 'action'
+                  if (data.note) action = data.note;
+                  else if (data.action) action = typeof data.action === 'string' ? data.action : JSON.stringify(data.action);
+
                   if (data.type === "logos_log") {
                     // Verified Logos Memo
                   }
@@ -408,93 +385,56 @@ export default function Home() {
         setLogs(newLogs);
       } else if (activeTab === "my") {
         // If no logs found for user, maybe empty
-        setLogs([]);
       }
 
-    } catch (e: any) {
-      console.error("Fetch error:", e);
-      setDebugInfo(`Error: ${e.message} at ${new Date().toLocaleTimeString()}`);
+    } catch (err: any) {
+      console.error("FetchLogs Error:", err);
+      setDebugInfo(`Fetch Error: ${err.message}`);
     }
   };
 
-  // Polling for Logs (Adaptive: 15 seconds)
+  // Helper to trigger fetch on load
   useEffect(() => {
     fetchLogs();
-    const interval = setInterval(fetchLogs, 30000);
+    const interval = setInterval(fetchLogs, 10000);
     return () => clearInterval(interval);
-  }, [activeTab, publicKey]);
-
-  // State for Red Team Mode
-  const [redTeamMode, setRedTeamMode] = useState(false);
-
-  // ... (existing helper functions)
+  }, [activeTab]);
 
   return (
-    <main className="container" style={{
-      borderColor: redTeamMode ? "#ff0000" : undefined,
-      boxShadow: redTeamMode ? "0 0 50px rgba(255, 0, 0, 0.1)" : undefined
-    }}>
-      {/* Header */}
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "3rem", marginTop: "1rem" }}>
-        <div className="logo" style={{ color: redTeamMode ? "#ff4444" : undefined }}>
-          {redTeamMode ? "💀 RedTeam" : "Logos"}
-          <span style={{ color: redTeamMode ? "#fff" : undefined }}>
-            {redTeamMode ? "Console" : "Dashboard"}
+    <main style={{ maxWidth: "1200px", margin: "0 auto", padding: "2rem", fontFamily: "'Inter', sans-serif" }}>
+      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "3rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", color: "#000", fontWeight: "bold", fontSize: "1.2rem" }}>
+            L
+          </div>
+          <h1 style={{ fontSize: "1.5rem", fontWeight: "bold", letterSpacing: "-0.05em" }}>Logos</h1>
+          <span style={{ fontSize: "0.8rem", background: "rgba(255,255,255,0.1)", padding: "0.2rem 0.6rem", borderRadius: "20px", color: "#aaa" }}>
+            Devnet
           </span>
         </div>
+
         <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <span style={{ fontSize: "0.8rem", color: debugInfo.includes("Error") ? "#ff4444" : "#666" }}>
+              {debugInfo}
+            </span>
+          </div>
 
           <button
             onClick={() => setRedTeamMode(!redTeamMode)}
             style={{
               padding: "0.5rem 1rem",
-              background: redTeamMode ? "#ff0000" : "#222",
+              background: redTeamMode ? "#ff4444" : "#333",
               color: "#fff",
-              border: "1px solid " + (redTeamMode ? "#ff4444" : "#444"),
-              borderRadius: "8px",
+              border: "none",
+              borderRadius: "6px",
               cursor: "pointer",
-              fontSize: "0.9rem",
               fontWeight: "bold",
-              boxShadow: redTeamMode ? "0 0 15px #ff0000" : "none",
               transition: "all 0.3s"
             }}
           >
-            {redTeamMode ? "🔴 ATTACK MODE ACTIVE" : "🛡️ Adversarial Mode"}
+            {redTeamMode ? "Exit Adversarial Mode" : "Adversarial Mode (Red Team)"}
           </button>
-
-          <button
-            onClick={fetchLogs}
-            style={{
-              padding: "0.5rem",
-              background: "#333",
-              color: "#fff",
-              border: "1px solid #555",
-              borderRadius: "8px",
-              cursor: "pointer",
-              fontSize: "1.2rem",
-              display: "flex", alignItems: "center", justifyContent: "center"
-            }}
-            title="Refresh Logs"
-          >
-            🔄
-          </button>
-
-          {!redTeamMode && (
-            <button
-              onClick={() => setDemoMode(!demoMode)}
-              style={{
-                padding: "0.5rem 1rem",
-                background: demoMode ? "var(--primary)" : "#333",
-                color: "#fff",
-                border: "none",
-                borderRadius: "8px",
-                cursor: "pointer",
-                fontSize: "0.9rem"
-              }}
-            >
-              {demoMode ? "Demo Mode ON" : "Demo Mode"}
-            </button>
-          )}
           <WalletMultiButton />
         </div>
       </header>
@@ -547,14 +487,8 @@ export default function Home() {
                 <button
                   className="btn"
                   onClick={() => {
-                    setRecipient("TornadoCash_Authority..."); // Trigger Blacklist Rule logic (simulated)
+                    setRecipient("TornadoCash_Authority..."); // Trigger Blacklist Rule logic
                     setAmount(50);
-                    // We need to inject a specific reason or target logic in handleScanAndLog for this
-                    // For now, we simulate by standard logic (amount < 100 approves), but let's override logic momentarily?
-                    // Actually, handleScanAndLog uses `amount > 100` rule.
-                    // Let's rely on Amount for now, or update handleScanAndLog to check recipient blacklist.
-                    // For MVP: Just use Amount Scenario.
-                    setAmount(999);
                     setTimeout(() => handleScanAndLog(), 100);
                   }}
                   disabled={loading || !publicKey}

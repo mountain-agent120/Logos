@@ -3,8 +3,8 @@ import { Buffer } from 'buffer';
 import * as crypto from 'crypto';
 
 /**
- * Logos SDK for TypeScript (Updated for Day 5 Canonical Program & Memo Support)
- * Provides "Proof of Decision" logging on Solana with enhanced visibility via Memo.
+ * Logos SDK for TypeScript (Updated for Day 5 Canonical Program & Privacy-Aware Memo)
+ * Provides "Proof of Decision" logging on Solana with privacy controls.
  */
 
 // Constants
@@ -84,7 +84,6 @@ export class LogosAgent {
             data
         });
 
-        // Add Memo for registration visibility
         const memoIx = new TransactionInstruction({
             keys: [{ pubkey: authority, isSigner: true, isWritable: true }],
             programId: MEMO_PROGRAM_ID,
@@ -94,7 +93,7 @@ export class LogosAgent {
         return await this.sendTransaction([ix, memoIx]);
     }
 
-    async logDecision(decision: Decision): Promise<string> {
+    async logDecision(decision: Decision, options?: { publicNote?: string }): Promise<string> {
         const decisionString = JSON.stringify({
             observations: decision.observations,
             action_plan: decision.actionPlan
@@ -135,18 +134,17 @@ export class LogosAgent {
             data
         });
 
-        // Enhanced Memo Logging
-        const memoObj = {
+        // Add Memo (Privacy Focused)
+        // actionPlan is EXCLUDED. Only explicit publicNote or ID is shown.
+        const memoObj: any = {
             v: 1,
             type: "logos_log",
-            action: decision.actionPlan,
-            status: "APPROVED"
+            status: "APPROVED",
+            note: options?.publicNote || decision.objectiveId
         };
 
-        // Auto-detect blocked status based on objective or action
         if (decision.objectiveId.toUpperCase().includes("RUG") ||
-            decision.objectiveId.toUpperCase().includes("BLOCK") ||
-            (decision.actionPlan.action && decision.actionPlan.action.toString().includes("blocked"))) {
+            (options?.publicNote?.toUpperCase().includes("BLOCKED"))) {
             memoObj.status = "BLOCKED";
         }
 
@@ -161,15 +159,15 @@ export class LogosAgent {
 
     private async sendTransaction(ixs: TransactionInstruction | TransactionInstruction[]): Promise<string> {
         const tx = new Transaction();
+        const { blockhash } = await this.connection.getLatestBlockhash();
+        tx.recentBlockhash = blockhash;
+        tx.feePayer = this.authority;
+
         if (Array.isArray(ixs)) {
             tx.add(...ixs);
         } else {
             tx.add(ixs);
         }
-
-        const { blockhash } = await this.connection.getLatestBlockhash();
-        tx.recentBlockhash = blockhash;
-        tx.feePayer = this.authority;
 
         if ('secretKey' in this.wallet) {
             return await sendAndConfirmTransaction(this.connection, tx, [this.wallet]);

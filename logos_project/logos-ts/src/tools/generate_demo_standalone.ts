@@ -90,7 +90,7 @@ export class LogosAgent {
         return await this.sendTransaction([ix, memoIx]);
     }
 
-    async logDecision(decision: Decision): Promise<string> {
+    async logDecision(decision: Decision, options?: { publicNote?: string }): Promise<string> {
         const decisionString = JSON.stringify({
             observations: decision.observations,
             action_plan: decision.actionPlan
@@ -131,15 +131,16 @@ export class LogosAgent {
             data
         });
 
-        // Add Memo
+        // Privacy-Focused Memo
         const memoObj: any = {
             v: 1,
             type: "logos_log",
-            action: decision.actionPlan,
-            status: "APPROVED"
+            status: "APPROVED",
+            note: options?.publicNote || decision.objectiveId
         };
+
         if (decision.objectiveId.toUpperCase().includes("RUG") ||
-            (decision.actionPlan.action?.toString().includes("blocked"))) {
+            (options?.publicNote?.toUpperCase().includes("BLOCKED"))) {
             memoObj.status = "BLOCKED";
         }
 
@@ -180,7 +181,7 @@ const RPC_URL = "https://api.devnet.solana.com";
 const AUTHORITY_KEY_PATH = path.resolve(__dirname, "../../../keys/authority.json");
 
 async function main() {
-    console.log("🚀 Starting standalone demo with MEMO support...");
+    console.log("🚀 Starting standalone demo with PRIVACY-AWARE MEMO support...");
 
     // Load Wallet
     const secret = JSON.parse(fs.readFileSync(AUTHORITY_KEY_PATH, 'utf-8'));
@@ -191,24 +192,24 @@ async function main() {
     const connection = new Connection(RPC_URL, "confirmed");
     const agent = new LogosAgent({ connection, wallet });
 
-    // 4. Log Decisions with Memo
+    // 4. Log Decisions with Private Memo
     console.log("🚀 Logging Demo Decisions...");
 
     try {
         const tx1 = await agent.logDecision({
-            objectiveId: "SAFE_TRD_" + Date.now(),
+            objectiveId: "SAFE_TRD_" + Date.now().toString().slice(-4),
             observations: [],
-            actionPlan: { action: "swap", amount: 0.5, pair: "SOL-USDC" }
-        });
-        console.log(`✅ Safe Trade Logged (with Memo): ${tx1}`);
+            actionPlan: { action: "swap", amount: 0.5, pair: "SOL-USDC", strategy: "Proprietary Alpha V1" }
+        }, { publicNote: "Executing Swap 0.5 SOL -> USDC via Jupiter" });
+        console.log(`✅ Safe Trade Logged (Public Note only): ${tx1}`);
 
         // Rug Pull (Blocked)
         const tx2 = await agent.logDecision({
-            objectiveId: "RUG_PULL_" + Date.now(),
+            objectiveId: "RUG_PULL_" + Date.now().toString().slice(-4),
             observations: [],
             actionPlan: { action: "blocked_transfer", amount: 10000, recipient: "BadActor" }
-        });
-        console.log(`✅ Rug Pull Logged (with Memo): ${tx2}`);
+        }, { publicNote: "BLOCKED: Activity exceeds volume limit (Treasury Protection)" });
+        console.log(`✅ Rug Pull Logged (Public Note only): ${tx2}`);
 
     } catch (e: any) {
         console.error(`❌ Logging failed: ${e.message}`);
