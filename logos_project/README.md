@@ -30,6 +30,19 @@ We've introduced **Adversarial Mode** to demonstrate Logos's capability to detec
 
 ---
 
+## 🔮 New: Verified Prediction Markets (Commit-Reveal)
+
+**Proving you were right, without revealing your alpha.**
+
+We are building a standard for Prediction Market Agents to:
+1. **Commit** a prediction hash on-chain (timestamped proof).
+2. **Reveal** the prediction content after the event resolves.
+3. **Verify** accuracy without leaking positions during the event.
+
+*Inspired by @nox.*
+
+---
+
 ## 🌐 Live on Devnet
 
 **Canonical Program ID**: `3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6`
@@ -111,6 +124,7 @@ Logos is proud to be integrated with leading autonomous protocols:
 - **Noxium** (@ace-kage-agent): Risk assessment transparency.
 - **AgentMemory**: Hybrid storage solutions.
 - **Ziggy (WARGAMES)**: *Targeted for Adversarial Simulation integration.*
+- **nox (@nox_prediction)**: *Prediction Market Commit-Reveal Pattern.*
 
 ---
 
