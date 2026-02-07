@@ -8,7 +8,7 @@ import * as crypto from 'crypto';
  */
 
 // Constants
-const PROGRAM_ID_DEVNET = "3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6";
+const PROGRAM_ID_DEVNET = "Ldm2tof9CHcyaHWh3nBkwiWNGYN8rG5tex7NMbHQxG3";
 const MEMO_PROGRAM_ID = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
 
 // Anchor Discriminators
@@ -105,6 +105,7 @@ export class LogosAgent {
         const hashBuf = Buffer.from(decisionHash, 'utf8');
         const objIdBuf = Buffer.from(decision.objectiveId, 'utf8');
 
+        // Serialize: Discriminator + Hash (String) + ObjectiveID (String)
         const dataSize = 8 + (4 + hashBuf.length) + (4 + objIdBuf.length);
         const data = Buffer.alloc(dataSize);
 
@@ -135,7 +136,6 @@ export class LogosAgent {
         });
 
         // Add Memo (Privacy Focused)
-        // actionPlan is EXCLUDED. Only explicit publicNote or ID is shown.
         const memoObj: any = {
             v: 1,
             type: "logos_log",
@@ -157,6 +157,81 @@ export class LogosAgent {
         return await this.sendTransaction([logIx, memoIx]);
     }
 
+    /**
+     * Commit a secret (prediction) on-chain without revealing the content.
+     * Used for "Commit-Reveal" schemes in Prediction Markets.
+     * 
+     * @param data The data (e.g. prediction JSON) to commit.
+     * @param topicId A unique identifier for the event/topic.
+     * @param options salt (optional), publicNote (optional)
+     * @returns signature, salt, commitment
+     */
+    async commit(data: any, topicId: string, options?: { salt?: string, dryRun?: boolean, publicNote?: string }): Promise<{ signature: string, salt: string, commitment: string }> {
+        const salt = options?.salt || crypto.randomBytes(16).toString('hex');
+
+        // Commitment = SHA256(JSON(data) + salt)
+        // Sort keys to ensure deterministic JSON
+        const dataStr = JSON.stringify(data, Object.keys(data).sort());
+        const commitment = crypto.createHash('sha256').update(dataStr + salt).digest('hex');
+
+        if (options?.dryRun) {
+            return { signature: `dry_run:${commitment}`, salt, commitment };
+        }
+
+        const objectiveId = `COMMIT:${topicId}`;
+
+        const decision: Decision = {
+            objectiveId,
+            observations: [],
+            actionPlan: {
+                action: "COMMIT",
+                commitment_hash: commitment,
+                // We DON'T include the data or salt here!
+            }
+        };
+
+        const tx = await this.logDecision(decision, {
+            publicNote: options?.publicNote || `Commitment for ${topicId}`
+        });
+
+        return { signature: tx, salt, commitment };
+    }
+
+    /**
+     * Reveal a previously committed secret.
+     * This logs the full data and salt on-chain, proving the prediction was made earlier.
+     * 
+     * @param data The original data.
+     * @param topicId The same topicId used in commit.
+     * @param salt The salt returned from commit().
+     */
+    async reveal(data: any, topicId: string, salt: string, options?: { dryRun?: boolean }): Promise<{ signature: string, commitment: string }> {
+        // 1. Re-calculate commitment
+        const dataStr = JSON.stringify(data, Object.keys(data).sort());
+        const commitment = crypto.createHash('sha256').update(dataStr + salt).digest('hex');
+
+        // 2. Log the Reveal
+        const objectiveId = `REVEAL:${topicId}`;
+
+        const decision: Decision = {
+            objectiveId,
+            observations: [],
+            actionPlan: {
+                action: "REVEAL",
+                original_data: data,
+                salt: salt,
+                verified_commitment: commitment
+            },
+            dryRun: options?.dryRun
+        };
+
+        const tx = await this.logDecision(decision, {
+            publicNote: `Reveal for ${topicId} (Verified Hash: ${commitment.slice(0, 8)}...)`
+        });
+
+        return { signature: tx, commitment };
+    }
+
     private async sendTransaction(ixs: TransactionInstruction | TransactionInstruction[]): Promise<string> {
         const tx = new Transaction();
         const { blockhash } = await this.connection.getLatestBlockhash();
@@ -173,7 +248,16 @@ export class LogosAgent {
             return await sendAndConfirmTransaction(this.connection, tx, [this.wallet]);
         } else if (typeof this.wallet.signTransaction === 'function') {
             const signedTx = await this.wallet.signTransaction(tx);
-            return await this.connection.sendRawTransaction(signedTx.serialize());
+            // Send raw transaction
+            const signature = await this.connection.sendRawTransaction(signedTx.serialize());
+            // Wait for confirmation
+            const latestBlockhash = await this.connection.getLatestBlockhash();
+            await this.connection.confirmTransaction({
+                signature,
+                blockhash: latestBlockhash.blockhash,
+                lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
+            });
+            return signature;
         } else {
             throw new Error("Wallet not supported");
         }
