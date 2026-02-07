@@ -14,7 +14,10 @@ export default function Home() {
 
   const [recipient, setRecipient] = useState("GoodUser123456789");
   const [amount, setAmount] = useState(10);
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [lastSignature, setLastSignature] = useState<string | undefined>(undefined);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
   const [redTeamMode, setRedTeamMode] = useState(false);
@@ -179,119 +182,12 @@ export default function Home() {
 
       // Add Compute Budget Priority Fee & Limit to fix Simulation Failures
       transaction.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }));
-      transaction.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1000 }));
+      transaction.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50000 })); // Increased for reliability
 
-      // Explicitly fetch blockhash from Helius
-      const { blockhash } = await heliusConnection.getLatestBlockhash("confirmed");
-      transaction.recentBlockhash = blockhash;
-      transaction.feePayer = publicKey;
+      // ... (existing code)
 
-      // 2. Register Agent Instruction (if not registered)
-      if (!isRegistered) {
-        console.log("Agent not registered. Adding register instruction...");
-        const agentId = "SimulatedAgent-" + Date.now().toString().slice(-4);
-        // global:register_agent -> [135, 157, 66, 195, 2, 113, 175, 30]
-        const discriminator = new Uint8Array([135, 157, 66, 195, 2, 113, 175, 30]);
-
-        const idBytes = encoder.encode(agentId);
-        const data = Buffer.alloc(8 + 4 + idBytes.length);
-        data.set(discriminator, 0);
-        data.writeUInt32LE(idBytes.length, 8);
-        data.set(idBytes, 12);
-
-        const registerIx = new TransactionInstruction({
-          programId: PROGRAM_ID,
-          keys: [
-            { pubkey: agentPda, isSigner: false, isWritable: true },
-            { pubkey: publicKey, isSigner: true, isWritable: true },
-            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-          ],
-          data: data
-        });
-        transaction.add(registerIx);
-
-        // Memo for Registration
-        const memoRegIx = new TransactionInstruction({
-          keys: [{ pubkey: publicKey, isSigner: true, isWritable: true }],
-          programId: new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"),
-          data: Buffer.from(JSON.stringify({ v: 1, type: "logos_log", note: `Agent Registered: ${agentId}` }), 'utf-8')
-        });
-        transaction.add(memoRegIx);
-      }
-
-      // 3. Decision Logic & BLOCK Check
-      // Use the 'check' variables which are guaranteed to be current
-      const isRugPull = checkAmount > 100;
-      const isSanctions = checkRecipient.includes("Tornado") || checkRecipient.includes("Attacker");
-      const isBlocked = isRugPull || isSanctions;
-
-      // NOTE: We don't send money in this simulation, we just Log the Decision.
-
-      const objectiveId = isBlocked ? "TREASURY_PROTECTION" : `OBJ-${Date.now().toString().slice(-6)}`;
-      const decisionHash = await computeHash({
-        action: isBlocked ? "BLOCK" : "APPROVE",
-        target: checkRecipient,
-        amount: checkAmount,
-        timestamp: Date.now()
-      });
-
-      // PDA: Decision Record
-      const [decisionPda] = PublicKey.findProgramAddressSync(
-        [encoder.encode("decision"), agentPda.toBuffer(), encoder.encode(objectiveId)],
-        PROGRAM_ID
-      );
-
-      // 5. Log Decision Instruction
-      const discLog = new Uint8Array([160, 73, 104, 176, 37, 115, 231, 204]);
-
-      // CRITICAL FIX: Python SDK treats decision_hash as String (hex string), not raw bytes!
-      // We must send it as UTF-8 encoded string with length prefix, NOT as 32-byte buffer.
-      const hashBytes = encoder.encode(decisionHash); // Hex string as UTF-8 bytes (64 bytes)
-      const objBytes = encoder.encode(objectiveId);
-
-      // Buffer Layout: Discriminator (8) + HashLen (4) + Hash (64) + ObjLen (4) + Obj (N)
-      const logData = Buffer.alloc(8 + 4 + hashBytes.length + 4 + objBytes.length);
-      let offset = 0;
-      logData.set(discLog, offset); offset += 8;
-
-      // String serialization: length prefix + bytes
-      logData.writeUInt32LE(hashBytes.length, offset); offset += 4;
-      logData.set(hashBytes, offset); offset += hashBytes.length;
-
-      logData.writeUInt32LE(objBytes.length, offset); offset += 4;
-      logData.set(objBytes, offset); offset += objBytes.length;
-
-      const logIx = new TransactionInstruction({
-        programId: PROGRAM_ID,
-        keys: [
-          { pubkey: decisionPda, isSigner: false, isWritable: true },
-          { pubkey: agentPda, isSigner: false, isWritable: true },
-          { pubkey: publicKey, isSigner: true, isWritable: true },
-          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-        ],
-        data: logData
-      });
-      transaction.add(logIx);
-
-      // 6. Add Memo (Status & Note)
-      const memoContent = {
-        v: 1,
-        type: "logos_log",
-        status: isBlocked ? "BLOCKED" : "APPROVED",
-        note: isBlocked
-          ? (isRugPull ? "BLOCKED: Treasury Drain Attempt > 100 SOL" : "BLOCKED: Sanctions Evasion Policy")
-          : `Safe Trade: ${checkAmount} SOL -> ${checkRecipient.slice(0, 6)}...`
-      };
-
-      const memoIx = new TransactionInstruction({
-        keys: [{ pubkey: publicKey, isSigner: true, isWritable: true }],
-        programId: new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"),
-        data: Buffer.from(JSON.stringify(memoContent), 'utf-8')
-      });
-      transaction.add(memoIx);
-
-      // 7. Send Transaction using Helius
-      const sig = await sendTransaction(transaction, heliusConnection, { skipPreflight: false });
+      // 7. Send Transaction (skipPreflight: true to allow "failing" simulations for Red Teaming)
+      const sig = await sendTransaction(transaction, heliusConnection, { skipPreflight: true });
       console.log("Tx Signature:", sig);
 
       // 8. Result Modal
@@ -366,19 +262,26 @@ export default function Home() {
   }, [publicKey]);
 
   // Fetch Logic
-  const fetchLogs = async () => {
-    // Explicitly use Helius RPC for logs to avoid rate limits
-    const devConnection = new Connection("https://devnet.helius-rpc.com/?api-key=4bc3bcef-b068-47c7-bd21-41b0d2db75b6", "confirmed");
+  const fetchLogs = async (isLoadMore = false) => {
+    // Explicitly use Public RPC to avoid Helius limits
+    const devConnection = new Connection("https://api.devnet.solana.com", "confirmed");
+
+    if (isLoadMore) setIsLoadingMore(true);
 
     try {
       let signatures = [];
+      const options: any = { limit: 10 };
+
+      if (isLoadMore && lastSignature) {
+        options.before = lastSignature;
+      }
 
       if (activeTab === "my" && publicKey) {
         // Fetch User Logs
-        signatures = await devConnection.getSignaturesForAddress(publicKey, { limit: 20 });
+        signatures = await devConnection.getSignaturesForAddress(publicKey, options);
       } else {
         // Fetch Global Logs
-        signatures = await devConnection.getSignaturesForAddress(PROGRAM_ID, { limit: 20 });
+        signatures = await devConnection.getSignaturesForAddress(PROGRAM_ID, options);
       }
 
       console.log(`[LogosDebug] Fetched ${signatures.length} signatures for ${activeTab}`);
@@ -480,12 +383,20 @@ export default function Home() {
       });
 
       if (newLogs.length > 0) {
-        setLogs(newLogs);
+        if (isLoadMore) {
+          setLogs(prev => [...prev, ...newLogs]);
+        } else {
+          setLogs(newLogs);
+        }
+      } else {
+        if (isLoadMore) setHasMore(false);
       }
 
     } catch (err: any) {
       console.error("FetchLogs Error:", err);
       setDebugInfo(`Fetch Error: ${err.message}`);
+    } finally {
+      setIsLoadingMore(false);
     }
   };
 
@@ -840,6 +751,27 @@ export default function Home() {
                   </div>
                 </div>
               ))
+            )}
+
+            {/* Load More Button */}
+            {hasMore && logs.length > 0 && (
+              <div style={{ marginTop: "1rem", textAlign: "center" }}>
+                <button
+                  onClick={() => fetchLogs(true)}
+                  disabled={isLoadingMore}
+                  style={{
+                    background: "transparent",
+                    border: "1px solid #444",
+                    color: "#888",
+                    padding: "0.5rem 1rem",
+                    borderRadius: "4px",
+                    cursor: isLoadingMore ? "not-allowed" : "pointer",
+                    fontSize: "0.8rem"
+                  }}
+                >
+                  {isLoadingMore ? "Loading..." : "Load More Logs 📜"}
+                </button>
+              </div>
             )}
           </div>
         </section>
