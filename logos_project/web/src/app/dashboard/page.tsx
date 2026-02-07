@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { Connection, PublicKey, Transaction, TransactionInstruction, SystemProgram } from "@solana/web3.js";
+import { Connection, PublicKey, Transaction, TransactionInstruction, SystemProgram, ComputeBudgetProgram } from "@solana/web3.js";
 import { Buffer } from "buffer";
 
 // Constants
@@ -109,6 +109,15 @@ export default function Home() {
       const isRegistered = agentAccountInfo !== null;
 
       const transaction = new Transaction();
+
+      // Add Compute Budget Priority Fee & Limit to fix Simulation Failures
+      transaction.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }));
+      transaction.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1000 }));
+
+      // Explicitly fetch blockhash from Helius
+      const { blockhash } = await heliusConnection.getLatestBlockhash("confirmed");
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = publicKey;
 
       // 2. Register Agent Instruction (if not registered)
       if (!isRegistered) {
