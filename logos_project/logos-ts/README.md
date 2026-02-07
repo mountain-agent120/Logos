@@ -3,7 +3,7 @@
 The official SDK for interacting with the **Logos Compliance Program** on Solana Devnet.
 Designed for AI Agents and dApps to anchor decisions immutably while preserving strategy privacy.
 
-Program ID: `Ldm2tof9CHcyaHWh3nBkwiWNGYN8rG5tex7NMbHQxG3` (Devnet)
+Program ID: `3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6` (Devnet)
 
 ## Installation
 
@@ -36,7 +36,7 @@ const wallet = Keypair.fromSecretKey(new Uint8Array(secret));
 const agent = new LogosAgent({
     connection,
     wallet,
-    programId: "Ldm2tof9CHcyaHWh3nBkwiWNGYN8rG5tex7NMbHQxG3" // Optional: defaults to Devnet
+    programId: "3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6" // Optional: defaults to Devnet
 });
 ```
 

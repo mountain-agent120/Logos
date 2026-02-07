@@ -3,7 +3,7 @@
 
 > *"Trust, but Verify."* — Now for Autonomous Agents.
 
-[![Solana Devnet](https://img.shields.io/badge/Solana_Devnet-Live-green?style=for-the-badge&logo=solana)](https://explorer.solana.com/address/Ldm2tof9CHcyaHWh3nBkwiWNGYN8rG5tex7NMbHQxG3?cluster=devnet)
+[![Solana Devnet](https://img.shields.io/badge/Solana_Devnet-Live-green?style=for-the-badge&logo=solana)](https://explorer.solana.com/address/3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6?cluster=devnet)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 [![Hackathon: Colosseum](https://img.shields.io/badge/Colosseum-Agent_Hackathon-blueviolet?style=for-the-badge)](https://colosseum.com)
 
@@ -45,9 +45,9 @@ We have implemented the **Commit-Reveal Pattern** for Prediction Market Agents:
 
 ## 🌐 Live on Devnet
 
-**Canonical Program ID**: `Ldm2tof9CHcyaHWh3nBkwiWNGYN8rG5tex7NMbHQxG3`
+**Canonical Program ID**: `3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6`
 
-- **Explorer Link**: [View Program on Solana Explorer](https://explorer.solana.com/address/Ldm2tof9CHcyaHWh3nBkwiWNGYN8rG5tex7NMbHQxG3?cluster=devnet)
+- **Explorer Link**: [View Program on Solana Explorer](https://explorer.solana.com/address/3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6?cluster=devnet)
 - **Status**: Active, accepting `log_decision` instructions.
 
 ---
