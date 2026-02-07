@@ -23,6 +23,16 @@ export declare class LogosAgent {
         publicNote?: string;
     }): Promise<string>;
     /**
+     * AgentBets Integration: Place a bet and commit the reasoning in a single atomic transaction.
+     * This provides "Skin in the Game" - prove you put money where your mouth is.
+     */
+    buyAndCommit(marketId: string, outcomeIndex: number, amountSol: number, reason: string, objectiveId?: string, options?: {
+        apiBase?: string;
+    }): Promise<{
+        signature: string;
+        decisionHash: string;
+    }>;
+    /**
      * Commit a secret (prediction) on-chain without revealing the content.
      * Used for "Commit-Reveal" schemes in Prediction Markets.
      *

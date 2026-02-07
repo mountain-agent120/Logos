@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { Connection, PublicKey, Transaction, TransactionInstruction, SystemProgram, Keypair, sendAndConfirmTransaction } from '@solana/web3.js';
 import { Buffer } from 'buffer';
 import * as crypto from 'crypto';
@@ -155,6 +156,135 @@ export class LogosAgent {
         });
 
         return await this.sendTransaction([logIx, memoIx]);
+    }
+
+    /**
+     * AgentBets Integration: Place a bet and commit the reasoning in a single atomic transaction.
+     * This provides "Skin in the Game" - prove you put money where your mouth is.
+     */
+    async buyAndCommit(
+        marketId: string,
+        outcomeIndex: number,
+        amountSol: number,
+        reason: string,
+        objectiveId: string = "AGENTBETS_PREDICTION",
+        options: { apiBase?: string } = {}
+    ): Promise<{ signature: string, decisionHash: string }> {
+        const apiBase = options.apiBase || "https://agentbets-api-production.up.railway.app";
+        const authority = this.authority;
+
+        // 1. Get Unsigned Bet Transaction from AgentBets API
+        console.log(`Logos: Fetching bet tx for market ${marketId}...`);
+        const response = await axios.post(`${apiBase}/markets/${marketId}/bet`, {
+            buyerPubkey: authority.toBase58(),
+            outcomeIndex,
+            amount: amountSol
+        });
+
+        const { unsignedTx: txBase64, message } = response.data as any;
+        if (!txBase64) throw new Error("Failed to get transaction from AgentBets API: " + JSON.stringify(response.data));
+
+        // 2. Deserialize Transaction (Legacy Only for now)
+        const txBuffer = Buffer.from(txBase64, 'base64');
+        let tx: Transaction;
+        try {
+            tx = Transaction.from(txBuffer);
+        } catch (e) {
+            throw new Error(`Transaction deserialize failed. AgentBets response might be VersionedTransaction which is not fully supported yet in this atomic flow. Error: ${e}`);
+        }
+
+        // 3. Create Logos Decision & Log Instruction
+        const decisionData = {
+            objectiveId,
+            observations: [{ marketId, outcomeIndex, amountSol }],
+            actionPlan: {
+                action: "BET",
+                reason,
+                platform: "AgentBets"
+            },
+            dryRun: false
+        };
+
+        const decisionString = JSON.stringify({
+            observations: decisionData.observations,
+            action_plan: decisionData.actionPlan
+        });
+        const decisionHash = crypto.createHash('sha256').update(decisionString).digest('hex');
+
+        // --- Create Log Instruction ---
+        const hashBuf = Buffer.from(decisionHash, 'utf8');
+        const objIdBuf = Buffer.from(objectiveId, 'utf8');
+
+        const dataSize = 8 + (4 + hashBuf.length) + (4 + objIdBuf.length);
+        const data = Buffer.alloc(dataSize);
+        let offset = 0;
+        DISCRIMINATOR_LOG.copy(data, offset); offset += 8;
+        data.writeUInt32LE(hashBuf.length, offset); offset += 4;
+        hashBuf.copy(data, offset); offset += hashBuf.length;
+        data.writeUInt32LE(objIdBuf.length, offset); offset += 4;
+        objIdBuf.copy(data, offset); offset += objIdBuf.length;
+
+        const agentPda = this.getAgentPda(authority);
+        const decisionPda = this.getDecisionPda(agentPda, objectiveId);
+
+        const logIx = new TransactionInstruction({
+            programId: this.programId,
+            keys: [
+                { pubkey: decisionPda, isSigner: false, isWritable: true },
+                { pubkey: agentPda, isSigner: false, isWritable: true },
+                { pubkey: authority, isSigner: true, isWritable: true },
+                { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+            ],
+            data
+        });
+
+        // Add Log Instruction to the Bet Transaction
+        // Important: Add BEFORE Memo so Memo describes the whole action? Or AFTER? Order doesn't strictly matter for Atomicity.
+        tx.add(logIx);
+
+        // 4. Add Memo
+        const memoIx = new TransactionInstruction({
+            keys: [{ pubkey: authority, isSigner: true, isWritable: true }],
+            programId: MEMO_PROGRAM_ID,
+            data: Buffer.from(JSON.stringify({
+                v: 1,
+                type: "logos_bet",
+                market: marketId,
+                outcome: outcomeIndex,
+                reason: reason.slice(0, 50) // Short reason in memo
+            }), 'utf-8')
+        });
+        tx.add(memoIx);
+
+        // 5. Sign and Send
+        console.log("Logos: Signing atomic transaction...");
+
+        // Ensure recent blockhash is fresh enough (API might have fetched it a second ago, usually fine)
+        // If needed: 
+        // const { blockhash } = await this.connection.getLatestBlockhash();
+        // tx.recentBlockhash = blockhash;
+
+        this.connection = this.connection || new Connection("https://api.devnet.solana.com", "confirmed");
+
+        let signature: string;
+
+        if ('secretKey' in this.wallet) {
+            // Re-sign with payer
+            signature = await sendAndConfirmTransaction(this.connection, tx, [this.wallet]);
+        } else if (typeof this.wallet.signTransaction === 'function') {
+            const signedTx = await this.wallet.signTransaction(tx);
+            signature = await this.connection.sendRawTransaction(signedTx.serialize());
+            const latestBlockhash = await this.connection.getLatestBlockhash();
+            await this.connection.confirmTransaction({
+                signature,
+                blockhash: latestBlockhash.blockhash,
+                lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
+            });
+        } else {
+            throw new Error("Wallet not supported for signing");
+        }
+
+        return { signature, decisionHash };
     }
 
     /**
