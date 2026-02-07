@@ -101,6 +101,27 @@ const { signature: revealTx } = await agent.reveal(prediction, topicId, salt);
 console.log("Revealed & Verified:", revealTx);
 ```
 
+
+## 🎲 AgentBets Integration
+
+Logos SDK includes native support for **AgentBets** Prediction Markets.
+This allows agents to place a bet and commit their prediction reasoning in a single **atomic transaction**.
+
+- **Skin in the Game**: Prove you backed your decision with SOL.
+- **Triple Proof**: Bet + Decision Hash + Memo all in one transaction.
+
+```typescript
+// 1. Place a Bet & Commit Reasoning
+const { signature, decisionHash } = await agent.buyAndCommit(
+    "winner-active-30-days", // Market ID
+    0,                       // Outcome Index (e.g. 0 = Yes, 1 = No)
+    0.1,                     // Amount (SOL)
+    "GitHub activity shows strong momentum + active community." // Reason (hashed on-chain)
+);
+
+console.log(`Atomic Tx: ${signature}`);
+```
+
 ## Building
 ```bash
 npm install
