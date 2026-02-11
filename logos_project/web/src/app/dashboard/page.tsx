@@ -7,6 +7,7 @@ import { Buffer } from "buffer";
 
 // Constants
 const PROGRAM_ID = new PublicKey("3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6");
+const HELIUS_RPC_URL = "https://devnet.helius-rpc.com/?api-key=4bc3bcef-b068-47c7-bd21-41b0d2db75b6";
 
 interface LogEntry {
   sig: string;
@@ -99,7 +100,7 @@ export default function Home() {
     setScanResult(null);
 
     try {
-      const heliusConnection = new Connection("https://api.devnet.solana.com", "confirmed");
+      const heliusConnection = new Connection(HELIUS_RPC_URL, "confirmed");
       const tx = await heliusConnection.getTransaction(scanSignature, { maxSupportedTransactionVersion: 0 });
 
       if (!tx) {
@@ -173,8 +174,7 @@ export default function Home() {
     try {
       // 1. Setup Connection with Fallback capability
       // Using a reliable public RPC endpoint for Devnet
-      const rpcEndpoint = "https://api.devnet.solana.com";
-      const heliusConnection = new Connection(rpcEndpoint, "confirmed");
+      const heliusConnection = new Connection(HELIUS_RPC_URL, "confirmed");
 
       // Balance Check (Skipped for Red Team to allow testing even with low funds if we fallback)
       if (!isRedTeamSimulation) {
@@ -410,7 +410,7 @@ export default function Home() {
   // Fetch Logic
   const fetchLogs = async (isLoadMore = false) => {
     // Explicitly use Public RPC to avoid Helius limits
-    const devConnection = new Connection("https://api.devnet.solana.com", "confirmed");
+    const devConnection = new Connection(HELIUS_RPC_URL, "confirmed");
 
     if (isLoadMore) setIsLoadingMore(true);
 
