@@ -8,6 +8,7 @@ import { Buffer } from "buffer";
 // Constants
 const PROGRAM_ID = new PublicKey("3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6");
 const HELIUS_RPC_URL = "https://devnet.helius-rpc.com/?api-key=4bc3bcef-b068-47c7-bd21-41b0d2db75b6";
+const PUBLIC_RPC_URL = "https://api.devnet.solana.com"; // Fallback for writes
 
 interface LogEntry {
   sig: string;
@@ -173,8 +174,8 @@ export default function Home() {
 
     try {
       // 1. Setup Connection with Fallback capability
-      // Using a reliable public RPC endpoint for Devnet
-      const heliusConnection = new Connection(HELIUS_RPC_URL, "confirmed");
+      // Using public RPC for transaction sending (wallet compatibility)
+      const heliusConnection = new Connection(PUBLIC_RPC_URL, "confirmed");
 
       // Balance Check (Skipped for Red Team to allow testing even with low funds if we fallback)
       if (!isRedTeamSimulation) {
@@ -241,18 +242,6 @@ export default function Home() {
       // Mock Data for Hash
       const observations = [{ type: "price", source: "jupiter", value: 2500 }];
       const actionPlan = { action: "transfer", amount: checkAmount, recipient: overrideRecipient || recipient };
-
-      // RED TEAM OPTIMIZATION:
-      // If this is a known "Blocked" scenario (Rug Pull or Sanctions),
-      // we can short-circuit the network call to provide an instant, clean "BLOCKED" UI.
-      // This avoids confusing "Simulation Failed" warnings in the user's wallet.
-      const isBlocked = isRedTeamSimulation && (checkAmount >= 1000 || overrideRecipient?.includes("Tornado"));
-      if (isBlocked) {
-        console.log("Red Team: Simulating Policy Block (Client-Side for Demo)");
-        await runMockSimulation(checkAmount, overrideRecipient);
-        setLoading(false);
-        return;
-      }
 
       const obsHash = await computeHash(observations);
       const decisionHash = await computeHash(actionPlan);
