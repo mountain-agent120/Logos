@@ -201,7 +201,19 @@ export default function Home() {
       transaction.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }));
       transaction.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50000 }));
 
-      // --- INSTRUCTION BUILDING (Same as before) ---
+      // --- INSTRUCTION BUILDING ---
+      // Anchor discriminators (SHA256("global:<method_name>")[:8])
+      const REGISTER_AGENT_DISC = Buffer.from([135, 157, 66, 195, 2, 113, 175, 30]);
+      const LOG_DECISION_DISC = Buffer.from([160, 73, 104, 176, 37, 115, 231, 204]);
+
+      // Helper: Anchor-style string serialization (u32 length prefix + bytes)
+      const anchorString = (s: string): Buffer => {
+        const bytes = Buffer.from(s, "utf-8");
+        const len = Buffer.alloc(4);
+        len.writeUInt32LE(bytes.length, 0);
+        return Buffer.concat([len, bytes]);
+      };
+
       // 1. Check if Agent Registered
       let isRegistered = false;
       try {
@@ -212,45 +224,36 @@ export default function Home() {
       }
 
       // If not registered, add register instruction
+      const agentId = `Agent-${publicKey.toBase58().slice(0, 8)}`;
       if (!isRegistered) {
-        // Generate PDA for the agent
-        const [newAgentPda] = PublicKey.findProgramAddressSync(
-          [Buffer.from("agent"), publicKey.toBuffer()],
-          PROGRAM_ID
-        );
-
         const registerIx = new TransactionInstruction({
           keys: [
-            { pubkey: newAgentPda, isSigner: false, isWritable: true },
+            { pubkey: agentPda, isSigner: false, isWritable: true },
             { pubkey: publicKey, isSigner: true, isWritable: true },
             { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
           ],
           programId: PROGRAM_ID,
-          // Discriminator for "register_agent"
           data: Buffer.concat([
-            Buffer.from([214, 15, 63, 132, 49, 119, 209, 63]),
-            Buffer.from(new TextEncoder().encode(`Agent-${publicKey.toBase58().slice(0, 4)}`.padEnd(32).slice(0, 32)))
+            REGISTER_AGENT_DISC,
+            anchorString(agentId)
           ])
         });
         transaction.add(registerIx);
       }
 
       // 2. Log Decision Instruction
-      // Mock Data for Hash
       const observations = [{ type: "price", source: "jupiter", value: 2500 }];
       const actionPlan = { action: "transfer", amount: checkAmount, recipient: overrideRecipient || recipient };
 
-      const obsHash = await computeHash(observations);
-      const decisionHash = await computeHash(actionPlan);
-      const currentTimestamp = Math.floor(Date.now() / 1000);
-      const objectiveId = isRedTeamSimulation ? "TREASURY_PROTECTION_POLICY" : "SAFE_TRADE_EXECUTION";
+      const decisionHash = await computeHash({ ...actionPlan, obs: observations });
+      const objectiveId = isRedTeamSimulation ? "TREASURY_PROTECTION" : "SAFE_TRADE";
 
-      // Calculate PDA for Decision
+      // Decision PDA: seeds = ["decision", agentPda, objectiveId] (matches Python SDK)
       const [decisionPda] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("decision"),
-          publicKey.toBuffer(),
-          Buffer.from(new Uint8Array(new BigInt64Array([BigInt(currentTimestamp)]).buffer))
+          agentPda.toBuffer(),
+          Buffer.from(objectiveId, "utf-8")
         ],
         PROGRAM_ID
       );
@@ -264,10 +267,9 @@ export default function Home() {
         ],
         programId: PROGRAM_ID,
         data: Buffer.concat([
-          Buffer.from([125, 23, 153, 58, 204, 215, 127, 23]), // log_decision discriminator
-          Buffer.from(obsHash, 'hex'),
-          Buffer.from(decisionHash, 'hex'),
-          Buffer.from(new TextEncoder().encode(objectiveId.padEnd(32).slice(0, 32)))
+          LOG_DECISION_DISC,
+          anchorString(decisionHash),   // decision_hash as Anchor String
+          anchorString(objectiveId)      // objective_id as Anchor String
         ])
       });
       transaction.add(logIx);
