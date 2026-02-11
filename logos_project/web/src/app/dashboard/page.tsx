@@ -485,14 +485,47 @@ export default function Home() {
           let agent = tx.transaction.message.accountKeys[0].pubkey.toString().slice(0, 8) + "..."; // Payer
           let hash = "View Transaction";
 
-          // Parse Memo for enhanced details
-          if (memoIx) {
+          // --- Parse Program Logs for objectiveId (primary source) ---
+          const programLogs = tx.meta?.logMessages || [];
+          for (const log of programLogs) {
+            // Match: "Decision Logged. Obj: BLOCKED:RT:1770825002, Hash: abc123..."
+            const decisionMatch = log.match(/Decision Logged\. Obj: ([^,]+), Hash: (\S+)/);
+            if (decisionMatch) {
+              const objId = decisionMatch[1];  // e.g. "BLOCKED:RT:1770825002" or "APPROVED:TX:1770824961"
+              const decHash = decisionMatch[2];
+              objective = objId;
+              hash = decHash.slice(0, 16) + "...";
+
+              // Extract status from objectiveId
+              if (objId.startsWith("BLOCKED")) {
+                status = "BLOCKED";
+                action = "🛑 Policy Violation Detected — Action Blocked";
+              } else if (objId.startsWith("APPROVED")) {
+                status = "APPROVED";
+                action = "✅ Decision Approved & Logged";
+              } else {
+                // Legacy format (e.g. "LOGOS-GENESIS-001", "DEBUG-TEST-001")
+                status = "LOGGED";
+                action = "📝 Decision Logged";
+              }
+              break;
+            }
+
+            // Match: "Instruction: RegisterAgent"
+            if (log.includes("Instruction: RegisterAgent")) {
+              action = "🤖 Agent Registered";
+              status = "REGISTERED";
+              objective = "Agent Registration";
+            }
+          }
+
+          // --- Fallback: Parse Memo for enhanced details (legacy support) ---
+          if (memoIx && objective === "Unknown") {
             let memoText = "";
             if (memoIx.parsed) {
               memoText = typeof memoIx.parsed === 'string' ? memoIx.parsed : JSON.stringify(memoIx.parsed);
             } else if (memoIx.data) {
               try {
-                // Simple heuristic: try to decode if it looks like base58
                 memoText = "Memo Found";
               } catch (e) { }
             }
@@ -509,18 +542,10 @@ export default function Home() {
                   if (data.oid) objective = data.oid;
                   if (data.objective_id) objective = data.objective_id;
 
-                  // Privacy Update: Prioritize 'note', fallback to 'action'
                   if (data.note) action = data.note;
                   else if (data.action) action = typeof data.action === 'string' ? data.action : JSON.stringify(data.action);
-
-                  if (data.type === "logos_log") {
-                    // Verified Logos Memo
-                  }
-                } else {
-                  action = `Memo: ${memoText.slice(0, 50)}...`;
                 }
               } catch (e) {
-                // Not JSON
                 action = `Memo: ${memoText.slice(0, 50)}...`;
               }
             }
@@ -868,45 +893,54 @@ export default function Home() {
                 {activeTab === "my" ? "No recent logs found for your wallet." : "No global logs found (Devnet is quiet today)."}
               </div>
             ) : (
-              (demoMode ? DEMO_LOGS : logs).map((log: any, i: number) => (
-                <div key={i} style={{
-                  background: "#111",
-                  padding: "1rem",
-                  borderRadius: "8px",
-                  borderLeft: `3px solid ${log.status === "APPROVED" ? "var(--success)" : "var(--error)"}`,
-                  opacity: redTeamMode && log.status !== "BLOCKED" ? 0.5 : 1
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
-                    <span className={`status-badge ${log.status === "APPROVED" ? "success" : "error"}`}>
-                      {log.status}
-                    </span>
-                    <span style={{ fontSize: "0.8rem", color: "#666" }}>{log.timestamp}</span>
-                  </div>
-                  {log.action && (
-                    <div style={{ fontSize: "0.85rem", color: "#ccc", marginBottom: "0.5rem" }}>
-                      {log.action}
+              (demoMode ? DEMO_LOGS : logs).map((log: any, i: number) => {
+                const statusColor = log.status === "BLOCKED" ? "#ff4444"
+                  : log.status === "APPROVED" ? "#00cc66"
+                    : log.status === "REGISTERED" ? "#aa66ff"
+                      : "#4488ff"; // LOGGED (legacy)
+                const statusBadgeClass = log.status === "BLOCKED" ? "error"
+                  : log.status === "APPROVED" ? "success"
+                    : "success"; // neutral for others
+                return (
+                  <div key={i} style={{
+                    background: "#111",
+                    padding: "1rem",
+                    borderRadius: "8px",
+                    borderLeft: `3px solid ${statusColor}`,
+                    opacity: redTeamMode && log.status !== "BLOCKED" ? 0.5 : 1
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+                      <span className={`status-badge ${statusBadgeClass}`} style={{ background: `${statusColor}22`, color: statusColor, border: `1px solid ${statusColor}44` }}>
+                        {log.status}
+                      </span>
+                      <span style={{ fontSize: "0.8rem", color: "#666" }}>{log.timestamp}</span>
                     </div>
-                  )}
-                  {log.agent && (
-                    <div style={{ fontSize: "0.75rem", color: "#666", marginBottom: "0.25rem" }}>
-                      Agent: {log.agent} | Policy: {log.objective}
+                    {log.action && (
+                      <div style={{ fontSize: "0.85rem", color: "#ccc", marginBottom: "0.5rem" }}>
+                        {log.action}
+                      </div>
+                    )}
+                    {log.agent && (
+                      <div style={{ fontSize: "0.75rem", color: "#666", marginBottom: "0.25rem" }}>
+                        Agent: {log.agent} | Objective: <span style={{ fontFamily: "monospace", color: statusColor }}>{log.objective}</span>
+                      </div>
+                    )}
+                    <div style={{ fontSize: "0.8rem", color: "#888", marginBottom: "0.25rem" }}>
+                      PoD: <span style={{ fontFamily: "monospace", color: "#aaa" }}>{log.hash.substring(0, 16)}...</span>
                     </div>
-                  )}
-                  <div style={{ fontSize: "0.8rem", color: "#888", marginBottom: "0.25rem" }}>
-                    PoD: <span style={{ fontFamily: "monospace", color: "#aaa" }}>{log.hash.substring(0, 16)}...</span>
+                    <div style={{ fontSize: "0.8rem" }}>
+                      <a
+                        href={`https://explorer.solana.com/tx/${log.sig}?cluster=devnet`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: "var(--primary)", textDecoration: "none" }}
+                      >
+                        View Transaction ↗
+                      </a>
+                    </div>
                   </div>
-                  <div style={{ fontSize: "0.8rem" }}>
-                    <a
-                      href={`https://explorer.solana.com/tx/${log.sig}?cluster=devnet`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: "var(--primary)", textDecoration: "none" }}
-                    >
-                      View Transaction ↗
-                    </a>
-                  </div>
-                </div>
-              ))
+                )
+              })
             )}
 
             {/* Load More Button */}
