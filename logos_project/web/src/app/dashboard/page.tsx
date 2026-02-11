@@ -101,8 +101,7 @@ export default function Home() {
     setScanResult(null);
 
     try {
-      const heliusConnection = new Connection(HELIUS_RPC_URL, "confirmed");
-      const tx = await heliusConnection.getTransaction(scanSignature, { maxSupportedTransactionVersion: 0 });
+      const tx = await connection.getTransaction(scanSignature, { maxSupportedTransactionVersion: 0 });
 
       if (!tx) {
         setScanResult({ error: "Transaction not found on Devnet" });
@@ -173,13 +172,11 @@ export default function Home() {
     const checkAmount = overrideAmount !== undefined ? overrideAmount : amount;
 
     try {
-      // 1. Setup Connection with Fallback capability
-      // Using public RPC for transaction sending (wallet compatibility)
-      const heliusConnection = new Connection(PUBLIC_RPC_URL, "confirmed");
+      // 1. Use wallet's connection for all operations to ensure consistency
 
       // Balance Check (Skipped for Red Team to allow testing even with low funds if we fallback)
       if (!isRedTeamSimulation) {
-        const balance = await heliusConnection.getBalance(publicKey);
+        const balance = await connection.getBalance(publicKey);
         if (balance < 0.002 * 1e9) {
           setResultModal({
             isOpen: true, type: "error", title: "Insufficient SOL",
@@ -208,7 +205,7 @@ export default function Home() {
       // 1. Check if Agent Registered
       let isRegistered = false;
       try {
-        const agentInfo = await heliusConnection.getAccountInfo(agentPda);
+        const agentInfo = await connection.getAccountInfo(agentPda);
         isRegistered = agentInfo !== null;
       } catch (e) {
         console.warn("Account info fetch failed, assuming not registered for simulation", e);
@@ -276,9 +273,9 @@ export default function Home() {
       transaction.add(logIx);
 
       // --- EXECUTION ---
-      // We use skipPreflight: true to allow the Red Team simulation to "fail" on chain if needed,
-      // but more importantly to avoid Preflight Simulation errors blocking the UI.
-      const sig = await sendTransaction(transaction, heliusConnection, { skipPreflight: true });
+      // CRITICAL: Must use the same connection that the wallet is using (from useConnection)
+      // Using a different connection causes wallet simulation failures
+      const sig = await sendTransaction(transaction, connection, { skipPreflight: true });
       console.log("Tx Signature:", sig);
 
       // --- RESULT HANDLING ---
