@@ -94,59 +94,92 @@ export default function Home() {
 
   // Action: Scan & Log (Real Logos Program Interaction)
   // Fix: Accept optional overrides to ensure state updates don't race
-  // Action: Verify External Transaction (AgentBets Integration)
+  // Action: Verify External Transaction (Scan)
   const handleVerifyTransaction = async () => {
     if (!scanSignature) return;
     setScanning(true);
     setScanResult(null);
 
     try {
-      const tx = await connection.getTransaction(scanSignature, { maxSupportedTransactionVersion: 0 });
+      const tx = await connection.getTransaction(scanSignature.trim(), { maxSupportedTransactionVersion: 0 });
 
       if (!tx) {
-        setScanResult({ error: "Transaction not found on Devnet" });
+        setScanResult({ error: "Transaction not found on Devnet. Make sure the signature is correct and the transaction is confirmed." });
+        setScanning(false);
         return;
       }
 
-      // Parse Logs
+      // Parse program logs
       const logs = tx.meta?.logMessages || [];
-      // Relaxed Matching for Memo
-      const memoLine = logs.find(l => l.includes("Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr log: ") || l.includes("Program log: Memo"));
-      const logosLine = logs.find(l => l.includes("Program 3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6 log: Instruction: LogDecision"));
 
-      let parsedMemo: any = "No Memo Found";
-      if (memoLine) {
-        // Extract content: Try to find start of JSON or string
-        // Typical format: "Program log: Memo (len 133): \"{\"v\":1...}\""
-        let rawMemo = "";
+      // Check for Logos Program involvement
+      const isLogosProgram = logs.some(l => l.includes(PROGRAM_ID.toBase58()));
 
-        if (memoLine.includes("Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr log: ")) {
-          rawMemo = memoLine.replace("Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr log: ", "");
-        } else {
-          // Generic match, look for quote or colon
-          const match = memoLine.match(/Memo.*?:\s*(.*)/);
-          if (match && match[1]) rawMemo = match[1];
-          else rawMemo = memoLine;
-        }
+      // Parse Decision Logged line
+      // Format: "Decision Logged. Obj: BLOCKED:RT:1770825002, Hash: abc123..."
+      let decisionObjective = "";
+      let decisionHash = "";
+      let decisionStatus = "";
+      let isLogosDecision = false;
 
-        // Remove quote chars if wrapping JSON string
-        const memoContent = rawMemo.trim().startsWith('"') ? rawMemo.trim().slice(1, -1) : rawMemo;
-        try {
-          // Handle escaped quotes in logs (Instruction logs often escape internal quotes)
-          const unescaped = memoContent.replace(/\\"/g, '"');
-          parsedMemo = JSON.parse(unescaped);
-        } catch (e) {
-          parsedMemo = memoContent;
+      for (const log of logs) {
+        const match = log.match(/Decision Logged\. Obj: ([^,]+), Hash: (\S+)/);
+        if (match) {
+          decisionObjective = match[1];
+          decisionHash = match[2];
+          isLogosDecision = true;
+
+          if (decisionObjective.startsWith("BLOCKED")) {
+            decisionStatus = "BLOCKED";
+          } else if (decisionObjective.startsWith("APPROVED")) {
+            decisionStatus = "APPROVED";
+          } else {
+            decisionStatus = "LOGGED";
+          }
+          break;
         }
       }
+
+      // Check for RegisterAgent
+      const isRegisterAgent = logs.some(l => l.includes("Instruction: RegisterAgent"));
+
+      // Parse Memo (if present, for legacy support)
+      const memoLine = logs.find(l =>
+        l.includes("Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr log: ") ||
+        l.includes("Program log: Memo")
+      );
+      let parsedMemo: any = null;
+      if (memoLine) {
+        let rawMemo = "";
+        if (memoLine.includes("Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr log: ")) {
+          rawMemo = memoLine.replace("Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr log: ", "");
+        }
+        if (rawMemo) {
+          const memoContent = rawMemo.trim().startsWith('"') ? rawMemo.trim().slice(1, -1) : rawMemo;
+          try {
+            parsedMemo = JSON.parse(memoContent.replace(/\\"/g, '"'));
+          } catch { parsedMemo = memoContent; }
+        }
+      }
+
+      // Build result
+      const txTimestamp = tx.blockTime
+        ? new Date(tx.blockTime * 1000).toLocaleString()
+        : "Unknown";
 
       setScanning(false);
       setScanResult({
         status: tx.meta?.err ? "FAILED" : "SUCCESS",
         slot: tx.slot,
+        timestamp: txTimestamp,
+        isLogosProgram,
+        isLogosDecision,
+        isRegisterAgent,
+        decisionStatus,
+        decisionObjective,
+        decisionHash,
         memo: parsedMemo,
-        logosDecision: logosLine ? "✅ Verified Logos Decision" : "❌ No Decision Logged",
-        logs: logs.slice(0, 5) // Show first 5 logs for context
+        logs: logs.filter(l => !l.includes("invoke") && !l.includes("success") && !l.includes("consumed")).slice(0, 8)
       });
 
     } catch (e: any) {
@@ -831,15 +864,77 @@ export default function Home() {
           {scanResult && (
             <div style={{ padding: "1rem", background: "#111", borderRadius: "8px", border: "1px solid #333" }}>
               {scanResult.error ? (
-                <p style={{ color: "red" }}>{scanResult.error}</p>
+                <p style={{ color: "#ff4444" }}>❌ {scanResult.error}</p>
               ) : (
                 <div style={{ fontSize: "0.9rem" }}>
-                  <div style={{ marginBottom: "0.5rem" }}>Status: <span style={{ color: scanResult.status === "SUCCESS" ? "#0f0" : "red" }}>{scanResult.status}</span></div>
-                  <div style={{ marginBottom: "0.5rem" }}>Logos Proof: <strong>{scanResult.logosDecision}</strong></div>
-                  <div style={{ marginBottom: "0.5rem", color: "#888" }}>Memo (Decoded):</div>
-                  <pre style={{ background: "#000", padding: "0.5rem", borderRadius: "4px", color: "#0f0", overflowX: "auto" }}>
-                    {typeof scanResult.memo === 'object' ? JSON.stringify(scanResult.memo, null, 2) : scanResult.memo}
-                  </pre>
+                  {/* Transaction Status */}
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.75rem" }}>
+                    <span>Tx Status: <span style={{ color: scanResult.status === "SUCCESS" ? "#00cc66" : "#ff4444", fontWeight: "bold" }}>{scanResult.status}</span></span>
+                    <span style={{ color: "#666", fontSize: "0.8rem" }}>{scanResult.timestamp} | Slot {scanResult.slot}</span>
+                  </div>
+
+                  {/* Logos Verification */}
+                  <div style={{
+                    background: scanResult.isLogosDecision ? "#0a2a1a" : (scanResult.isLogosProgram ? "#1a1a0a" : "#2a0a0a"),
+                    padding: "0.75rem",
+                    borderRadius: "6px",
+                    marginBottom: "0.75rem",
+                    border: `1px solid ${scanResult.isLogosDecision ? "#00cc6644" : "#ff444444"}`
+                  }}>
+                    <div style={{ fontWeight: "bold", marginBottom: "0.5rem", color: scanResult.isLogosDecision ? "#00cc66" : "#ff4444" }}>
+                      {scanResult.isLogosDecision
+                        ? "✅ Verified Logos Decision (Proof of Decision)"
+                        : scanResult.isRegisterAgent
+                          ? "🤖 Logos Agent Registration"
+                          : scanResult.isLogosProgram
+                            ? "⚠️ Logos Program Interaction (no decision logged)"
+                            : "❌ Not a Logos Transaction"}
+                    </div>
+
+                    {scanResult.isLogosDecision && (
+                      <>
+                        <div style={{ marginBottom: "0.4rem" }}>
+                          Policy Status:{" "}
+                          <span style={{
+                            color: scanResult.decisionStatus === "BLOCKED" ? "#ff4444" : "#00cc66",
+                            fontWeight: "bold",
+                            padding: "0.15rem 0.5rem",
+                            borderRadius: "4px",
+                            background: scanResult.decisionStatus === "BLOCKED" ? "#ff444422" : "#00cc6622",
+                            fontSize: "0.85rem"
+                          }}>
+                            {scanResult.decisionStatus === "BLOCKED" ? "🛑 BLOCKED" : "✅ APPROVED"}
+                          </span>
+                        </div>
+                        <div style={{ marginBottom: "0.4rem", color: "#aaa" }}>
+                          Objective: <span style={{ fontFamily: "monospace", color: "#ddd" }}>{scanResult.decisionObjective}</span>
+                        </div>
+                        <div style={{ color: "#aaa" }}>
+                          Decision Hash: <span style={{ fontFamily: "monospace", color: "#88aaff", fontSize: "0.8rem" }}>{scanResult.decisionHash}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Memo (if present) */}
+                  {scanResult.memo && (
+                    <div style={{ marginBottom: "0.75rem" }}>
+                      <div style={{ color: "#888", marginBottom: "0.25rem", fontSize: "0.8rem" }}>Attached Memo:</div>
+                      <pre style={{ background: "#000", padding: "0.5rem", borderRadius: "4px", color: "#0f0", overflowX: "auto", fontSize: "0.8rem" }}>
+                        {typeof scanResult.memo === 'object' ? JSON.stringify(scanResult.memo, null, 2) : scanResult.memo}
+                      </pre>
+                    </div>
+                  )}
+
+                  {/* Program Logs */}
+                  {scanResult.logs && scanResult.logs.length > 0 && (
+                    <details style={{ marginTop: "0.5rem" }}>
+                      <summary style={{ color: "#666", cursor: "pointer", fontSize: "0.8rem" }}>Program Logs ({scanResult.logs.length})</summary>
+                      <pre style={{ background: "#000", padding: "0.5rem", borderRadius: "4px", color: "#888", overflowX: "auto", fontSize: "0.7rem", marginTop: "0.25rem" }}>
+                        {scanResult.logs.join("\n")}
+                      </pre>
+                    </details>
+                  )}
                 </div>
               )}
             </div>
