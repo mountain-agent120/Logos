@@ -8,6 +8,16 @@ import { Buffer } from "buffer";
 // Constants
 const PROGRAM_ID = new PublicKey("3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6");
 
+interface LogEntry {
+  sig: string;
+  status: string;
+  timestamp: string;
+  action: string;
+  agent: string;
+  objective: string;
+  hash: string;
+}
+
 export default function Home() {
   const { connection } = useConnection();
   const { publicKey, sendTransaction } = useWallet();
