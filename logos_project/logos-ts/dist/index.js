@@ -331,6 +331,20 @@ class LogosAgent {
         });
         return { signature: tx, commitment };
     }
+    /**
+     * Verify a commitment offline.
+     * Use this to check if a revealed (Data + Salt) matches the on-chain Commitment Hash.
+     *
+     * @param data The data (e.g. prediction JSON) that was revealed.
+     * @param salt The salt revealed in the Memo or off-chain.
+     * @param commitment The commitment hash found on-chain (from the Commit transaction).
+     * @returns boolean
+     */
+    static verifyCommitment(data, salt, commitment) {
+        const dataStr = JSON.stringify(data, Object.keys(data).sort());
+        const calculated = crypto.createHash('sha256').update(dataStr + salt).digest('hex');
+        return calculated === commitment;
+    }
     async sendTransaction(ixs) {
         const tx = new web3_js_1.Transaction();
         const { blockhash } = await this.connection.getLatestBlockhash();
