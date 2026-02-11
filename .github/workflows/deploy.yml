@@ -34,7 +34,7 @@ jobs:
           static_site_generator: next
       
       - name: Install dependencies
-        run: npm ci
+        run: npm install --legacy-peer-deps
         working-directory: logos_project/web
         
       - name: Build with Next.js
