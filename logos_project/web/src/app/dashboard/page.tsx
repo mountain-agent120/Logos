@@ -6,7 +6,7 @@ import { Connection, PublicKey, Transaction, TransactionInstruction, SystemProgr
 import { Buffer } from "buffer";
 
 // Constants
-const PROGRAM_ID = new PublicKey("3V5F1dnBimq9UNwPSSxPzqLGgvhxPsw5gVqWATCJAxG6");
+const PROGRAM_ID = new PublicKey("Ldm2tof9CHcyaHWh3nBkwiWNGYN8rG5tex7NMbHQxG3");
 const HELIUS_RPC_URL = "https://devnet.helius-rpc.com/?api-key=4bc3bcef-b068-47c7-bd21-41b0d2db75b6";
 const PUBLIC_RPC_URL = "https://api.devnet.solana.com"; // Fallback for writes
 
