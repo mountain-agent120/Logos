@@ -241,14 +241,26 @@ export default function Home() {
         transaction.add(registerIx);
       }
 
-      // 2. Log Decision Instruction
+      // 2. POLICY CHECK — Determine if action should be blocked BEFORE building the tx
+      const isBlocked = isRedTeamSimulation && (checkAmount >= 1000 || overrideRecipient?.includes("Tornado"));
+      const status = isBlocked ? "BLOCKED" : "APPROVED";
+
+      // 3. Build Decision Data (includes status for verifiable proof)
       const observations = [{ type: "price", source: "jupiter", value: 2500 }];
       const actionPlan = { action: "transfer", amount: checkAmount, recipient: overrideRecipient || recipient };
 
-      const decisionHash = await computeHash({ ...actionPlan, obs: observations });
-      const objectiveId = isRedTeamSimulation ? "TREASURY_PROTECTION" : "SAFE_TRADE";
+      const decisionHash = await computeHash({
+        ...actionPlan,
+        obs: observations,
+        status,               // BLOCKED or APPROVED — part of the cryptographic proof
+        timestamp: Date.now()  // Uniqueness
+      });
 
-      // Decision PDA: seeds = ["decision", agentPda, objectiveId] (matches Python SDK)
+      // Unique objectiveId per decision (includes status + timestamp to avoid PDA collision)
+      const ts = Math.floor(Date.now() / 1000);
+      const objectiveId = `${status}:${isRedTeamSimulation ? "RT" : "TX"}:${ts}`;
+
+      // Decision PDA: seeds = ["decision", agentPda, objectiveId]
       const [decisionPda] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("decision"),
@@ -258,6 +270,9 @@ export default function Home() {
         PROGRAM_ID
       );
 
+      // 4. Build log_decision instruction
+      //    This ALWAYS executes — both BLOCKED and APPROVED decisions are recorded on-chain
+      //    The actual malicious action (transfer) is NEVER executed for BLOCKED decisions
       const logIx = new TransactionInstruction({
         keys: [
           { pubkey: decisionPda, isSigner: false, isWritable: true },
@@ -268,25 +283,20 @@ export default function Home() {
         programId: PROGRAM_ID,
         data: Buffer.concat([
           LOG_DECISION_DISC,
-          anchorString(decisionHash),   // decision_hash as Anchor String
-          anchorString(objectiveId)      // objective_id as Anchor String
+          anchorString(decisionHash),   // decision_hash (includes status)
+          anchorString(objectiveId)      // objective_id (includes BLOCKED/APPROVED)
         ])
       });
       transaction.add(logIx);
 
       // --- EXECUTION ---
-      // CRITICAL: Must use the same connection that the wallet is using (from useConnection)
-      // Using a different connection causes wallet simulation failures
+      // We ALWAYS send the log_decision transaction.
+      // For BLOCKED: only the audit log is recorded (the malicious action is NOT executed)
+      // For APPROVED: the audit log is recorded (in production, the actual action would follow)
       const sig = await sendTransaction(transaction, connection, { skipPreflight: true });
-      console.log("Tx Signature:", sig);
+      console.log(`[Logos] ${status} Decision logged. Tx: ${sig}`);
 
       // --- RESULT HANDLING ---
-      // In a real scenario, we would wait for confirmation. 
-      // For this demo, we check if it was a Red Team attack.
-      // If it was a generic "Rug Pull" amount (10000) or Sanctions (50), we simulate a BLOCK.
-
-      const isBlocked = isRedTeamSimulation && (checkAmount >= 1000 || overrideRecipient?.includes("Tornado"));
-
       setResultModal({
         isOpen: true,
         type: isBlocked ? "error" : "success",
@@ -302,8 +312,8 @@ export default function Home() {
               Status: {isBlocked ? "BLOCKED (Policy Violation)" : "APPROVED"}
             </div>
             {isBlocked && (
-              <p style={{ fontSize: "0.8rem", color: "#666" }}>
-                This simulated attack was successfully intercepted. No funds were moved.
+              <p style={{ fontSize: "0.8rem", color: "#aaa" }}>
+                ⚠️ The malicious action was NOT executed, but this BLOCK event has been permanently recorded on-chain as an audit trail.
               </p>
             )}
             <p style={{ fontSize: "0.7rem", color: "#555", marginTop: "0.5rem" }}>
